@@ -2,6 +2,7 @@
   lib,
   mermaid,
   components,
+  sequence,
 }:
 let
   inherit (mermaid)
@@ -10,6 +11,7 @@ let
     shape
     classDefs
     styleColor
+    styleText
     ;
   inherit (components) flatten;
 
@@ -84,10 +86,11 @@ let
 
   pushUnique = acc: x: if lib.elem x acc then acc else acc ++ [ x ];
 
-  # Nodes for one sequence: declared participants first, then anything referenced.
+  # Nodes for one sequence: declared/inferred participants first, then anything
+  # referenced (created participants and message endpoints).
   seqNodes =
     { seq, ... }:
-    lib.foldl' pushUnique (seq.participants or [ ]) (walkNodes' (seq.steps or [ ]));
+    lib.foldl' pushUnique (sequence.effectiveParticipants seq) (walkNodes' (seq.steps or [ ]));
 
   walkNodes' = xs: lib.concatMap walkNodes xs;
 
@@ -201,7 +204,7 @@ rec {
             let
               sc = styleColor b.color;
             in
-            if sc == null then "" else "style ${b.id} fill:${sc},stroke:#4a5568,color:#1a202c"
+            if sc == null then "" else "style ${b.id} fill:${sc},stroke:#4a5568,color:${styleText b.color}"
         ) usedBoundaries
       );
 

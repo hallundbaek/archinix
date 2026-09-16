@@ -3,6 +3,7 @@
 ```mermaid
 %%{init: {"look":"neo","sequence":{"mirrorActors":true},"theme":"redux-color"} }%%
 sequenceDiagram
+accTitle: Token Refresh
 autonumber 10 5
 box Internet
 actor user as End User
@@ -15,7 +16,7 @@ participant gateway@{ "type": "control" } as API Gateway
 participant auth as Auth Service
 participant db@{ "type": "database" } as PostgreSQL
 end
-link web: Dashboard @ https://grafana.example/web
+link auth: Runbook @ https://wiki.example/auth
 link db: Metrics @ https://grafana.example/db
 user ->> web: reload
 loop until fresh
@@ -53,5 +54,6 @@ auth <<-->> gateway: session sync
 
 ## Related
 
+- [Overview](./README.md)
 - [Acme Platform](./architecture.md)
 - [Token Refresh — Components](./token-refresh-architecture.md)

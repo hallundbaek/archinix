@@ -261,6 +261,27 @@ let
     else
       null;
 
+  # Relative luminance of a #rrggbb color (0-255 scale), for text contrast.
+  hexLuminance =
+    c:
+    let
+      r = parseHex2 (substring 1 2 c);
+      g = parseHex2 (substring 3 2 c);
+      b = parseHex2 (substring 5 2 c);
+    in
+    r * 0.2126 + g * 0.7152 + b * 0.0722;
+
+  # Readable text color for a given fill (falls back to a dark default).
+  styleText =
+    c:
+    let
+      sc = styleColor c;
+    in
+    if sc != null && strings.hasPrefix "#" sc && strings.match "#[0-9a-fA-F]{6}" sc != null then
+      if hexLuminance sc > 150 then "#1a202c" else "#f7fafc"
+    else
+      "#1a202c";
+
   # ---------------------------------------------------------------------------
   # Small helpers.
   # ---------------------------------------------------------------------------
@@ -287,6 +308,7 @@ in
     validColor
     boxColor
     styleColor
+    styleText
     ;
   inherit lines quote;
 }

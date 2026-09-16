@@ -2,6 +2,7 @@
 
 ```mermaid
 sequenceDiagram
+accTitle: Job Processing
 box rgb(45,55,72) Core Services
 participant gateway@{ "type": "control" } as API Gateway
 participant queue@{ "type": "queue" } as Job Queue
@@ -25,5 +26,6 @@ destroy worker
 
 ## Related
 
+- [Overview](./README.md)
 - [Acme Platform](./architecture.md)
 - [Job Processing — Components](./job-processing-architecture.md)

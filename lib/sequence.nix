@@ -10,7 +10,7 @@ let
     arrowEnum
     boxColor
     ;
-  inherit (components) flatten;
+  inherit (components) flatten resolveId;
 
   strings = lib.strings;
   lines = mermaid.lines;
@@ -64,28 +64,123 @@ let
       bs = lib.filter (b: lib.length b.path == 1 && b.name == key) (flatten comps).boundaries;
     in
     if bs == [ ] then null else lib.head bs;
+
+  # Actors referenced by a step, in order of appearance (all step kinds).
+  stepActors =
+    step:
+    if step ? message then
+      [
+        (resolveId step.message.from)
+        (resolveId step.message.to)
+      ]
+    else if step ? note then
+      map resolveId (step.note.actors or [ ])
+    else if step ? activate then
+      [ (resolveId step.activate) ]
+    else if step ? deactivate then
+      [ (resolveId step.deactivate) ]
+    else if step ? create then
+      [ (resolveId step.create) ]
+    else if step ? destroy then
+      [ (resolveId step.destroy) ]
+    else if step ? properties then
+      [ (resolveId step.properties.actor) ]
+    else if step ? details then
+      [ (resolveId step.details.actor) ]
+    else if step ? loop then
+      listActors (step.loop.steps or [ ])
+    else if step ? opt then
+      listActors (step.opt.steps or [ ])
+    else if step ? break then
+      listActors (step.break.steps or [ ])
+    else if step ? rect then
+      listActors (step.rect.steps or [ ])
+    else if step ? alt then
+      branchActors step.alt
+    else if step ? par then
+      branchActors step.par
+    else if step ? parOver then
+      branchActors step.parOver
+    else if step ? critical then
+      branchActors step.critical
+    else
+      [ ];
+
+  listActors = lib.concatMap stepActors;
+  branchActors = b: lib.concatMap (br: listActors (br.steps or [ ])) (b.branches or [ ]);
+
+  # Participants created mid-sequence; they must not be pre-declared.
+  stepCreated =
+    step:
+    if step ? create then
+      [ (resolveId step.create) ]
+    else if step ? loop then
+      listCreated (step.loop.steps or [ ])
+    else if step ? opt then
+      listCreated (step.opt.steps or [ ])
+    else if step ? break then
+      listCreated (step.break.steps or [ ])
+    else if step ? rect then
+      listCreated (step.rect.steps or [ ])
+    else if step ? alt then
+      branchCreated step.alt
+    else if step ? par then
+      branchCreated step.par
+    else if step ? parOver then
+      branchCreated step.parOver
+    else if step ? critical then
+      branchCreated step.critical
+    else
+      [ ];
+
+  listCreated = lib.concatMap stepCreated;
+  branchCreated = b: lib.concatMap (br: listCreated (br.steps or [ ])) (b.branches or [ ]);
+
+  # Participants inferred from the steps, minus those declared via `create`.
+  inferParticipants =
+    seq:
+    let
+      steps = seq.steps or [ ];
+      created = listCreated steps;
+    in
+    lib.filter (id: !(lib.elem id created)) (lib.unique (listActors steps));
+
+  # Explicit `participants` (order/boxing) extended with any actor referenced in
+  # the steps but not listed, or, when omitted, fully inferred from the steps.
+  effectiveParticipants =
+    seq:
+    if seq ? participants then
+      let
+        provided = map resolveId seq.participants;
+        created = listCreated (seq.steps or [ ]);
+        extra = lib.filter (id: !(lib.elem id provided) && !(lib.elem id created)) (inferParticipants seq);
+      in
+      provided ++ extra
+    else
+      inferParticipants seq;
 in
 rec {
   render =
     { comps, seq }:
     let
-      participants = seq.participants or [ ];
+      participants = effectiveParticipants seq;
       steps = seq.steps or [ ];
 
       initJson = lib.optional (seq ? config) "%%{init: ${builtins.toJSON seq.config} }%%";
 
       titleLines = lib.optional (seq ? diagramTitle) "title ${escape seq.diagramTitle}";
 
+      # Accessibility metadata is derived from the sequence title/description.
       accessLines =
-        (lib.optional (
-          seq ? accessibility && seq.accessibility ? title
-        ) "accTitle: ${escape seq.accessibility.title}")
-        ++ (lib.optional (seq ? accessibility && seq.accessibility ? description) (
-          if strings.match ".*\n.*" seq.accessibility.description != null then
-            "accDescr {\n${strings.removeSuffix "\n" seq.accessibility.description}\n}"
+        lib.optional (seq ? title) "accTitle: ${escape seq.title}"
+        ++ lib.optional (seq ? description) (
+          if strings.match ".*\n.*" seq.description != null then
+            "accDescr {\n${
+              strings.removeSuffix "\n" (lib.replaceStrings [ "}" ] [ "#125;" ] seq.description)
+            }\n}"
           else
-            "accDescr: ${escape seq.accessibility.description}"
-        ));
+            "accDescr: ${escape seq.description}"
+        );
 
       autonumberLines =
         let
@@ -270,7 +365,11 @@ rec {
     let
       flat = flatten comps;
       hasLeaf = n: builtins.isString n && flat.leaves ? ${n};
-      participants = seq.participants or [ ];
+      participants =
+        if seq ? participants && !(builtins.isList seq.participants) then
+          [ ]
+        else
+          effectiveParticipants seq;
 
       hereAt =
         path:
@@ -286,8 +385,11 @@ rec {
         if step ? comment then
           [ ]
         else if step ? message then
-          lib.optional (!(hasLeaf msg.from)) "${missing here msg.from} (message.from)"
-          ++ lib.optional (!(hasLeaf msg.to)) "${missing here msg.to} (message.to)"
+          lib.optional (!(hasLeaf (resolveId (msg.from or ""))))
+            "${missing here (resolveId (msg.from or ""))} (message.from)"
+          ++
+            lib.optional (!(hasLeaf (resolveId (msg.to or ""))))
+              "${missing here (resolveId (msg.to or ""))} (message.to)"
           ++
             lib.optional (msg ? arrow && !(lib.elem msg.arrow arrowEnum))
               "${here}: unknown arrow `${toString msg.arrow}`; expected one of: ${lib.concatStringsSep ", " arrowEnum}"
@@ -312,7 +414,7 @@ rec {
         else if step ? note then
           let
             pos = step.note.position;
-            actors = step.note.actors or [ ];
+            actors = map resolveId (step.note.actors or [ ]);
           in
           lib.optional (
             !(lib.elem pos [
@@ -334,14 +436,23 @@ rec {
           ) "${here}: note `${toString pos}` needs ${if pos == "over" then "one or two" else "one"} actor(s)"
           ++ lib.concatMap (n: lib.optional (!(hasLeaf n)) "${missing here n} (note actor)") actors
         else if step ? activate then
-          lib.optional (!(hasLeaf step.activate)) "${missing here step.activate} (activate)"
+          lib.optional (
+            !(hasLeaf (resolveId step.activate))
+          ) "${missing here (resolveId step.activate)} (activate)"
         else if step ? deactivate then
-          lib.optional (!(hasLeaf step.deactivate)) "${missing here step.deactivate} (deactivate)"
+          lib.optional (
+            !(hasLeaf (resolveId step.deactivate))
+          ) "${missing here (resolveId step.deactivate)} (deactivate)"
         else if step ? create then
-          lib.optional (!(hasLeaf step.create)) "${missing here step.create} (create)"
-          ++ lib.optional (lib.elem step.create participants) "${here}: created component `${step.create}` must not also be listed in participants"
+          let
+            created = resolveId step.create;
+          in
+          lib.optional (!(hasLeaf created)) "${missing here created} (create)"
+          ++ lib.optional (lib.elem created participants) "${here}: created component `${created}` must not also be listed in participants"
         else if step ? destroy then
-          lib.optional (!(hasLeaf step.destroy)) "${missing here step.destroy} (destroy)"
+          lib.optional (
+            !(hasLeaf (resolveId step.destroy))
+          ) "${missing here (resolveId step.destroy)} (destroy)"
         else if step ? loop then
           walkBlock path "loop" step.loop
         else if step ? opt then
@@ -367,12 +478,16 @@ rec {
         else if step ? critical then
           walkBranches path "critical" 0 step.critical
         else if step ? properties then
-          lib.optional (!(hasLeaf step.properties.actor)) "${missing here step.properties.actor} (properties)"
+          lib.optional (
+            !(hasLeaf (resolveId step.properties.actor))
+          ) "${missing here (resolveId step.properties.actor)} (properties)"
           ++ lib.optional (
             !(step.properties ? text) || !(builtins.isString step.properties.text)
           ) "${here}: properties needs a string `text`"
         else if step ? details then
-          lib.optional (!(hasLeaf step.details.actor)) "${missing here step.details.actor} (details)"
+          lib.optional (
+            !(hasLeaf (resolveId step.details.actor))
+          ) "${missing here (resolveId step.details.actor)} (details)"
           ++ lib.optional (
             !(step.details ? text) || !(builtins.isString step.details.text)
           ) "${here}: details needs a string `text`"
@@ -400,8 +515,8 @@ rec {
       stepErrors = lib.concatMap (walk [ ]) (seq.steps or [ ]);
     in
     (lib.optional (
-      !(seq ? participants) || !(builtins.isList participants)
-    ) "sequence `${id}`: `participants` must be a list")
+      seq ? participants && !(builtins.isList seq.participants)
+    ) "sequence `${id}`: `participants` must be a list if present")
     ++ lib.concatMap (
       n:
       lib.optional (
@@ -411,5 +526,11 @@ rec {
     ++ lib.optional (
       seq ? config && !(builtins.isAttrs seq.config)
     ) "sequence `${id}`: `config` must be an attribute set"
+    ++ lib.optional (
+      seq ? description && !(builtins.isString seq.description)
+    ) "sequence `${id}`: `description` must be a string"
     ++ stepErrors;
+}
+// {
+  inherit inferParticipants effectiveParticipants;
 }

@@ -7,7 +7,7 @@
     { self, nixpkgs }:
     let
       lib = import ./lib { inherit (nixpkgs) lib; };
-      model = import ./model;
+      model = import ./model { archinix = lib.dsl; };
 
       systems = [
         "x86_64-linux"

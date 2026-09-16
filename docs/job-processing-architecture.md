@@ -31,10 +31,11 @@ class gateway control
 class queue queue
 class db database
 class worker collections
-style b_core fill:#2D3748,stroke:#4a5568,color:#1a202c
+style b_core fill:#2D3748,stroke:#4a5568,color:#f7fafc
 ```
 
 ## Related
 
+- [Overview](./README.md)
 - [Job Processing](./job-processing.md)
 - [Acme Platform](./architecture.md)

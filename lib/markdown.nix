@@ -7,6 +7,7 @@ rec {
   page =
     {
       title,
+      description ? null,
       code,
       related ? [ ],
     }:
@@ -14,6 +15,10 @@ rec {
       [
         "# ${title}"
         ""
+      ]
+      ++ lib.optional (description != null) (strings.removeSuffix "\n" description)
+      ++ lib.optional (description != null) ""
+      ++ [
         "```mermaid"
         code
         "```"

@@ -47,6 +47,17 @@ let
     boundaries = [ ];
     entries = [ ];
   };
+
+  # Resolve a component reference: either a plain id string or a handle created
+  # by `component.define` (an attrset carrying `id`).
+  resolveId =
+    x:
+    if lib.isString x then
+      x
+    else if lib.isAttrs x && x ? id then
+      x.id
+    else
+      throw "expected a component id (string) or a handle from component.define; got ${builtins.typeOf x}";
 in
 rec {
   mkTree = components: tree components;
@@ -108,38 +119,44 @@ rec {
     path: name: node:
     let
       here = lib.concatStringsSep "." (path ++ [ name ]);
+      idErrors = lib.optional (
+        node ? id && (!(isString node.id) || node.id != name)
+      ) "${here}: `id` `${toString (node.id or null)}` does not match its key `${name}`";
     in
-    if node ? components then
-      (lib.optional (
-        !(node ? label) || !(isString node.label)
-      ) "${here}: boundary is missing a string `label`")
-      ++ (lib.optional (
-        node ? kind
-      ) "${here}: boundary must not define `kind` (only leaves are components)")
-      ++ (lib.optional (
-        node ? color && !(validColor node.color)
-      ) "${here}: invalid boundary color `#${toString (node.color or null)}`")
-      ++ lib.concatLists (lib.mapAttrsToList (n: c: rawErrors (path ++ [ name ]) n c) node.components)
-    else
-      (lib.optional (!(isString name) || !(validId name))
-        "${here}: invalid component id `${toString name}` (must match [A-Za-z_][A-Za-z0-9_]*, not a reserved word)"
-      )
-      ++ (lib.optional (
-        !(node ? label) || !(isString node.label)
-      ) "${here}: component is missing a string `label`")
-      ++ (lib.optional (!(node ? kind) || !(lib.elem node.kind kindEnum))
-        "${here}: component has invalid `kind` `${toString (node.kind or null)}`; expected one of: ${lib.concatStringsSep ", " kindEnum}`"
-      )
-      ++ lib.concatLists (
-        lib.imap0 (
-          i: l:
-          let
-            where = "${here}.links[${toString i}]";
-          in
-          lib.optional (!(l ? label) || !(isString l.label)) "${where}: missing string `label`"
-          ++ lib.optional (!(l ? url) || !(isString l.url)) "${where}: missing string `url`"
-        ) (node.links or [ ])
-      );
+    idErrors
+    ++ (
+      if node ? components then
+        (lib.optional (
+          !(node ? label) || !(isString node.label)
+        ) "${here}: boundary is missing a string `label`")
+        ++ (lib.optional (
+          node ? kind
+        ) "${here}: boundary must not define `kind` (only leaves are components)")
+        ++ (lib.optional (
+          node ? color && !(validColor node.color)
+        ) "${here}: invalid boundary color `#${toString (node.color or null)}`")
+        ++ lib.concatLists (lib.mapAttrsToList (n: c: rawErrors (path ++ [ name ]) n c) node.components)
+      else
+        (lib.optional (!(isString name) || !(validId name))
+          "${here}: invalid component id `${toString name}` (must match [A-Za-z_][A-Za-z0-9_]*, not a reserved word)"
+        )
+        ++ (lib.optional (
+          !(node ? label) || !(isString node.label)
+        ) "${here}: component is missing a string `label`")
+        ++ (lib.optional (!(node ? kind) || !(lib.elem node.kind kindEnum))
+          "${here}: component has invalid `kind` `${toString (node.kind or null)}`; expected one of: ${lib.concatStringsSep ", " kindEnum}`"
+        )
+        ++ lib.concatLists (
+          lib.imap0 (
+            i: l:
+            let
+              where = "${here}.links[${toString i}]";
+            in
+            lib.optional (!(l ? label) || !(isString l.label)) "${where}: missing string `label`"
+            ++ lib.optional (!(l ? url) || !(isString l.url)) "${where}: missing string `url`"
+          ) (node.links or [ ])
+        )
+    );
 
   validate =
     components:
@@ -149,4 +166,7 @@ rec {
       dupes = lib.unique (lib.filter (n: lib.length (lib.filter (m: m == n) names) > 1) names);
     in
     errs ++ lib.optional (dupes != [ ]) "duplicate component ids: ${lib.concatStringsSep ", " dupes}";
+}
+// {
+  inherit resolveId;
 }

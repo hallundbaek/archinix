@@ -3,8 +3,16 @@ let
   mermaid = import ./mermaid.nix { inherit lib; };
   components = import ./components.nix { inherit lib mermaid; };
   sequence = import ./sequence.nix { inherit lib mermaid components; };
-  architecture = import ./architecture.nix { inherit lib mermaid components; };
+  architecture = import ./architecture.nix {
+    inherit
+      lib
+      mermaid
+      components
+      sequence
+      ;
+  };
   markdown = import ./markdown.nix { inherit lib; };
+  dsl = import ./dsl.nix { inherit lib mermaid components; };
 
   # ---------------------------------------------------------------------------
   # Validation across the whole model.
@@ -77,6 +85,7 @@ let
       indexFile = "README.md";
 
       archTitle = arch.title or "System Architecture";
+      overviewLabel = "Overview";
       seqTitle = s: s.seq.title or s.id;
       viewTitle = s: "${seqTitle s} — Components";
 
@@ -84,11 +93,16 @@ let
         s:
         markdown.page {
           title = seqTitle s;
+          description = s.seq.description or null;
           code = sequence.render {
             inherit comps;
             seq = s.seq;
           };
           related = [
+            {
+              label = overviewLabel;
+              href = indexFile;
+            }
             {
               label = archTitle;
               href = archFile;
@@ -113,6 +127,10 @@ let
           };
           related = [
             {
+              label = overviewLabel;
+              href = indexFile;
+            }
+            {
               label = seqTitle s;
               href = seqFile s.id;
             }
@@ -131,7 +149,13 @@ let
           cfg = arch;
           title = archTitle;
         };
-        related = map (s: {
+        related = [
+          {
+            label = overviewLabel;
+            href = indexFile;
+          }
+        ]
+        ++ map (s: {
           label = seqTitle s;
           href = seqFile s.id;
         }) seqs;
@@ -197,6 +221,7 @@ in
     sequence
     architecture
     markdown
+    dsl
     ;
   inherit validateModel render renderDerivation;
 }

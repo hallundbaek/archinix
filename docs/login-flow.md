@@ -1,12 +1,21 @@
 # Login Flow
 
+End-user credentials are verified against PostgreSQL, with an optional
+OIDC lookup at the identity provider.
+
+- Invalid credentials return **401**.
+- An unreachable identity provider returns **503**.
+
 ```mermaid
 sequenceDiagram
 title Login
-accTitle: Login sequence
+accTitle: Login Flow
 accDescr {
-End user credentials are verified against PostgreSQL.
-Invalid credentials short-circuit with a 401.
+End-user credentials are verified against PostgreSQL, with an optional
+OIDC lookup at the identity provider.
+
+- Invalid credentials return **401**.
+- An unreachable identity provider returns **503**.
 }
 box Internet
 actor user as End User
@@ -20,7 +29,7 @@ participant auth as Auth Service
 participant db@{ "type": "database" } as PostgreSQL
 end
 participant idp@{ "type": "entity" } as Identity Provider
-link web: Dashboard @ https://grafana.example/web
+link auth: Runbook @ https://wiki.example/auth
 link db: Metrics @ https://grafana.example/db
 %% Happy path with an invalid-credentials branch
 user ->> web: enter credentials
@@ -54,5 +63,6 @@ details gateway: tier: edge
 
 ## Related
 
+- [Overview](./README.md)
 - [Acme Platform](./architecture.md)
 - [Login Flow — Components](./login-flow-architecture.md)

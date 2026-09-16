@@ -38,11 +38,12 @@ class gateway control
 class auth participant
 class db database
 class idp entity
-style b_core fill:#2D3748,stroke:#4a5568,color:#1a202c
-style b_edge fill:#2d333b,stroke:#4a5568,color:#1a202c
+style b_core fill:#2D3748,stroke:#4a5568,color:#f7fafc
+style b_edge fill:#2d333b,stroke:#4a5568,color:#f7fafc
 ```
 
 ## Related
 
+- [Overview](./README.md)
 - [Login Flow](./login-flow.md)
 - [Acme Platform](./architecture.md)

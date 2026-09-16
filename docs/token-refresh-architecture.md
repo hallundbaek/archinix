@@ -36,11 +36,12 @@ class web boundary
 class gateway control
 class auth participant
 class db database
-style b_core fill:#2D3748,stroke:#4a5568,color:#1a202c
-style b_edge fill:#2d333b,stroke:#4a5568,color:#1a202c
+style b_core fill:#2D3748,stroke:#4a5568,color:#f7fafc
+style b_edge fill:#2d333b,stroke:#4a5568,color:#f7fafc
 ```
 
 ## Related
 
+- [Overview](./README.md)
 - [Token Refresh](./token-refresh.md)
 - [Acme Platform](./architecture.md)
