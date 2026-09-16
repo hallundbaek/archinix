@@ -1,5 +1,5 @@
 {
-  description = "Architecture-as-code: define components and sequence diagrams in Nix, generate interlinked Mermaid markdown.";
+  description = "Archinix: architecture-as-code. Define components and sequence diagrams in Nix, generate interlinked Mermaid markdown.";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
@@ -163,7 +163,7 @@
       # example model + generated docs) so it is immediately usable offline.
       templates.default = {
         path = ./.;
-        description = "Architecture-as-code: Nix model -> interlinked Mermaid diagrams.";
+        description = "Archinix: Nix model -> interlinked Mermaid diagrams.";
       };
     };
 }

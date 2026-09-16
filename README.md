@@ -1,4 +1,4 @@
-# architecture
+# Archinix
 
 Architecture as code. Define your system **once** in Nix — a component tree and
 Mermaid sequence diagrams — and generate a set of interlinked Markdown pages
@@ -18,7 +18,7 @@ hand-maintaining parallel diagrams.
 Instantiate the project (library + example model + generated docs) and render it:
 
 ```console
-$ nix flake init -t github:OWNER/architecture
+$ nix flake init -t github:hallundbaek/archinix
 $ nix run .#render          # writes ./docs
 $ ls docs
 architecture.md  login-flow.md  login-flow-architecture.md  README.md  ...
