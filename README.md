@@ -124,6 +124,9 @@ in
 - `component.<kind> label` — a leaf. Add metadata with `//`, e.g.
   `component.database "PostgreSQL" // { links = [ ... ]; }`. `<kind>` is any name
   from the table below (`component.make` if you need full control).
+- `component.<kind> [ types ] label` — the same, with one or more semantic
+  `types` (see [Semantic types](#semantic-types)); `component.of [ types ] label`
+  derives the kind from the types instead.
 - `link label url` — an actor-menu entry for a leaf's `links`.
 
 Plain id strings still work everywhere, and the equivalent raw form (a plain
@@ -153,6 +156,71 @@ shape:
 `links` adds a Mermaid actor menu entry (`link <id>: <label> @ <url>`). See the
 caveats below: Mermaid crashes on menus for `actor`/`boundary`/`control`/`entity`
 participants, so prefer them on `participant`/`database`/`collections`/`queue`.
+
+### Semantic types
+
+A component can additionally carry one or more **semantic types** (e.g.
+`deployed-service`) — a second axis beside the visual `kind`. Declare a `types`
+registry and give components types:
+
+```nix
+let
+  ty = types.define {
+    deployed-service = { label = "Deployed Service"; color = "#3182ce"; };
+    queue-consumer   = { label = "Queue Consumer"; kind = "queue"; color = "#38a169"; };
+    database         = { label = "Database"; kind = "database"; color = "#805ad5"; };
+  };
+
+  c = component.define {
+    gateway = component.control     [ ty.deployed-service ]       "API Gateway";
+    auth    = component.participant [ ty.deployed-service ]       "Auth Service";
+    db      = component.database    [ ty.database ]               "PostgreSQL";
+    worker  = component.collections [ ty.deployed-service ty.queue-consumer ] "Worker";
+    # component.of derives the kind from the types instead of naming it:
+    queue   = component.of          [ ty.queue-consumer ]         "Job Queue";
+  };
+in
+{
+  types = ty;                       # the registry the renderer consumes
+  components = { /* ... inherit (c) ... */ };
+}
+```
+
+- Type fields: `label` (required), `kind` (optional, used only when the type
+  appears as an actor in a sequence diagram; default `participant`), and `color`
+  (optional). Type ids may contain hyphens and must not collide with component ids.
+- `component.<kind> [ types ] label` sets an explicit kind; type `kind`s are
+  ignored for the component. `component.of [ types ] label` derives the kind from
+  the types (error if none or several disagree).
+- A component's **colour** comes from its types when they agree, or from an
+  explicit `color`. More than one distinct type colour, with no explicit
+  `color`, is an error. Explicit `kind`/`color` silence a conflict.
+- A type's `label` is never inherited by a component.
+
+**Type-level sequences** use types as actors. The sequence page shows the
+abstract types; the architecture views expand each type endpoint to **all** its
+concrete components (the cross product, self-edges dropped), so one sequence
+covers every component of that type:
+
+```nix
+sequences.service-calls-db = {
+  title = "Service → Database";
+  participants = [ ty.deployed-service ty.database ];
+  steps = [ (message.solidArrow ty.deployed-service ty.database "query") ];
+};
+```
+
+```mermaid
+flowchart TD
+  orders -->|"SQL"| db
+  auth   -->|"SQL"| db
+  gateway-->|"SQL"| db
+```
+
+`architecture.edgeLabels` may use a type pair (`"deployed-service->database"`,
+applied to every expansion) or a concrete pair (`"orders->db"`, which overrides).
+A type used by a sequence must have at least one instance, and a type cannot be
+used with `create`/`destroy`.
 
 ## Defining sequences
 
@@ -383,6 +451,9 @@ message produces, and duplicate sequence slugs.
   `destroy` at the end of a sequence.
 - **`participants` vs `create`:** a participant declared with `create` must not
   also appear in `participants`.
+- **Type expansion is a global cross product:** one type-level message produces
+  an edge for every source instance × target instance, so many instances yield
+  many edges. Types used by a sequence must have at least one instance.
 - **New files in a Git checkout:** Nix evaluates a Git flake from the tracked
   tree, so a newly added `model/*.nix` must be `git add`ed before `render` (or
   the `watch` preview) will see it. Edits to already-tracked files are picked up
