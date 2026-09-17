@@ -2,6 +2,7 @@
   lib,
   mermaid,
   components,
+  typeUtils,
 }:
 let
   inherit (mermaid)
@@ -24,6 +25,27 @@ let
       flat.leaves.${id}
     else
       throw "sequence references unknown component `${id}`";
+
+  # Participant metadata for a component or a semantic type.
+  getParticipant =
+    comps: types: id:
+    if types ? ${id} then
+      {
+        label = types.${id}.label;
+        kind = types.${id}.kind or "participant";
+        isType = true;
+        links = [ ];
+      }
+    else
+      let
+        l = getLeaf comps id;
+      in
+      {
+        label = l.label;
+        kind = typeUtils.resolveKind types l;
+        isType = false;
+        links = l.links or [ ];
+      };
 
   decl =
     kind: id: label:
@@ -49,7 +71,8 @@ let
       flat = flatten comps;
       annotated = map (id: {
         inherit id;
-        top = flat.leaves.${id}.topBoundary;
+        # Types (and anything that is not a leaf) are not boxed by a boundary.
+        top = if flat.leaves ? ${id} then flat.leaves.${id}.topBoundary else null;
       }) participants;
       keys = lib.unique (map (a: a.top) annotated);
     in
@@ -161,7 +184,11 @@ let
 in
 rec {
   render =
-    { comps, seq }:
+    {
+      comps,
+      seq,
+      types,
+    }:
     let
       participants = effectiveParticipants seq;
       steps = seq.steps or [ ];
@@ -311,13 +338,11 @@ rec {
         group:
         let
           meta = if group.top == null then null else boundaryMeta comps group.top;
-          decls = map (
-            id:
-            let
-              l = getLeaf comps id;
-            in
-            decl l.kind id l.label
-          ) group.members;
+          infos = map (id: {
+            inherit id;
+            p = getParticipant comps types id;
+          }) group.members;
+          decls = map (x: decl x.p.kind x.id x.p.label) infos;
         in
         if meta == null then
           decls
@@ -337,9 +362,9 @@ rec {
       linkLines = lib.concatMap (
         id:
         let
-          l = getLeaf comps id;
+          p = getParticipant comps types id;
         in
-        map (lk: "link ${id}: ${escape lk.label} @ ${lk.url}") (l.links or [ ])
+        map (lk: "link ${id}: ${escape lk.label} @ ${lk.url}") p.links
       ) participants;
     in
     lines (
@@ -361,10 +386,14 @@ rec {
       comps,
       id,
       seq,
+      types,
     }:
     let
       flat = flatten comps;
-      hasLeaf = n: builtins.isString n && flat.leaves ? ${n};
+      isLeaf = n: builtins.isString n && flat.leaves ? ${n};
+      isType = n: builtins.isString n && types ? ${n};
+      memberIds = typeUtils.members comps types;
+      hasMembers = t: lib.length (memberIds.${t} or [ ]) > 0;
       participants =
         if seq ? participants && !(builtins.isList seq.participants) then
           [ ]
@@ -374,7 +403,31 @@ rec {
       hereAt =
         path:
         "sequence `${id}`" + lib.optionalString (path != [ ]) (" > " + lib.concatStringsSep " > " path);
-      missing = here: n: "${here}: component `${toString n}` is not defined in `components`";
+
+      # An actor reference may name a component or a type; a type must have
+      # concrete instances for the architecture expansion to mean anything.
+      refErrors =
+        here: n:
+        if !(builtins.isString n) then
+          [ "${here}: expected a component or type id" ]
+        else if isLeaf n then
+          [ ]
+        else if isType n then
+          lib.optional (!(hasMembers n)) "${here}: type `${n}` has no components"
+        else
+          [ "${here}: `${n}` is not a defined component or type" ];
+
+      # Only concrete components can be created or destroyed.
+      leafErrors =
+        here: n:
+        if !(builtins.isString n) then
+          [ "${here}: expected a component id" ]
+        else if isLeaf n then
+          [ ]
+        else if isType n then
+          [ "${here}: `${n}` is a type, not a concrete component" ]
+        else
+          [ "${here}: `${n}` is not a defined component" ];
 
       walk =
         path: step:
@@ -385,11 +438,8 @@ rec {
         if step ? comment then
           [ ]
         else if step ? message then
-          lib.optional (!(hasLeaf (resolveId (msg.from or ""))))
-            "${missing here (resolveId (msg.from or ""))} (message.from)"
-          ++
-            lib.optional (!(hasLeaf (resolveId (msg.to or ""))))
-              "${missing here (resolveId (msg.to or ""))} (message.to)"
+          refErrors here (resolveId (msg.from or ""))
+          ++ refErrors here (resolveId (msg.to or ""))
           ++
             lib.optional (msg ? arrow && !(lib.elem msg.arrow arrowEnum))
               "${here}: unknown arrow `${toString msg.arrow}`; expected one of: ${lib.concatStringsSep ", " arrowEnum}"
@@ -434,25 +484,19 @@ rec {
                 [ 1 ]
             ))
           ) "${here}: note `${toString pos}` needs ${if pos == "over" then "one or two" else "one"} actor(s)"
-          ++ lib.concatMap (n: lib.optional (!(hasLeaf n)) "${missing here n} (note actor)") actors
+          ++ lib.concatMap (n: refErrors here n) actors
         else if step ? activate then
-          lib.optional (
-            !(hasLeaf (resolveId step.activate))
-          ) "${missing here (resolveId step.activate)} (activate)"
+          refErrors here (resolveId step.activate)
         else if step ? deactivate then
-          lib.optional (
-            !(hasLeaf (resolveId step.deactivate))
-          ) "${missing here (resolveId step.deactivate)} (deactivate)"
+          refErrors here (resolveId step.deactivate)
         else if step ? create then
           let
             created = resolveId step.create;
           in
-          lib.optional (!(hasLeaf created)) "${missing here created} (create)"
+          leafErrors here created
           ++ lib.optional (lib.elem created participants) "${here}: created component `${created}` must not also be listed in participants"
         else if step ? destroy then
-          lib.optional (
-            !(hasLeaf (resolveId step.destroy))
-          ) "${missing here (resolveId step.destroy)} (destroy)"
+          leafErrors here (resolveId step.destroy)
         else if step ? loop then
           walkBlock path "loop" step.loop
         else if step ? opt then
@@ -478,16 +522,12 @@ rec {
         else if step ? critical then
           walkBranches path "critical" 0 step.critical
         else if step ? properties then
-          lib.optional (
-            !(hasLeaf (resolveId step.properties.actor))
-          ) "${missing here (resolveId step.properties.actor)} (properties)"
+          refErrors here (resolveId step.properties.actor)
           ++ lib.optional (
             !(step.properties ? text) || !(builtins.isString step.properties.text)
           ) "${here}: properties needs a string `text`"
         else if step ? details then
-          lib.optional (
-            !(hasLeaf (resolveId step.details.actor))
-          ) "${missing here (resolveId step.details.actor)} (details)"
+          refErrors here (resolveId step.details.actor)
           ++ lib.optional (
             !(step.details ? text) || !(builtins.isString step.details.text)
           ) "${here}: details needs a string `text`"
@@ -517,12 +557,7 @@ rec {
     (lib.optional (
       seq ? participants && !(builtins.isList seq.participants)
     ) "sequence `${id}`: `participants` must be a list if present")
-    ++ lib.concatMap (
-      n:
-      lib.optional (
-        !(hasLeaf n)
-      ) "sequence `${id}`: participant `${toString n}` is not defined in `components`"
-    ) participants
+    ++ lib.concatMap (n: refErrors "sequence `${id}`" n) participants
     ++ lib.optional (
       seq ? config && !(builtins.isAttrs seq.config)
     ) "sequence `${id}`: `config` must be an attribute set"

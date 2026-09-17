@@ -38,6 +38,9 @@ class gateway control
 class auth participant
 class db database
 class idp entity
+style auth fill:#3182ce,stroke:#4a5568,color:#f7fafc
+style db fill:#805ad5,stroke:#4a5568,color:#f7fafc
+style gateway fill:#3182ce,stroke:#4a5568,color:#f7fafc
 style b_core fill:#2D3748,stroke:#4a5568,color:#f7fafc
 style b_edge fill:#2d333b,stroke:#4a5568,color:#f7fafc
 ```

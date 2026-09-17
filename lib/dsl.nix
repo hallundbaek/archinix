@@ -6,7 +6,10 @@
 let
   inherit (mermaid) arrowTokens kindEnum;
   inherit (components) resolveId;
-  inherit (builtins) isAttrs;
+  inherit (builtins) isAttrs isList isString;
+
+  # Normalize one or a list of type handles/ids to a list of ids.
+  normalizeTypes = raw: map resolveId (if isList raw then raw else [ raw ]);
 
   # message.<arrow> from to label
   # message.<arrow> from to { label; central; activateTarget; deactivateSource; ... }
@@ -49,13 +52,19 @@ let
     };
 
   # component.<kind> label
-  # component.<kind> { label; links; ... }
+  # component.<kind> [ types ] label
+  # component.<kind> { label; ... }
+  # component.<kind> [ types ] { label; ... }
   mkLeaf =
-    kind: arg:
+    kind: types: arg:
     let
       spec = if isAttrs arg then arg else { label = arg; };
     in
-    { inherit kind; } // spec;
+    { inherit kind; } // spec // (if types == null then { } else { types = normalizeTypes types; });
+
+  # `component.<kind> arg` unless `arg` is a list of types, in which case it
+  # returns a function awaiting the label/spec.
+  mkKind = kind: arg: if isList arg then (spec: mkLeaf kind arg spec) else mkLeaf kind null arg;
 
   # boundary label children
   # boundary { label; color; } children
@@ -75,7 +84,7 @@ in
 
   # Component tree helpers. `component.<kind>` builds a leaf, `boundary` builds a
   # boundary node containing `children`, and `link` builds an actor-menu entry.
-  component = lib.mapAttrs (kind: _: mkLeaf kind) (lib.genAttrs kindEnum (_: null)) // {
+  component = lib.mapAttrs (kind: _: mkKind kind) (lib.genAttrs kindEnum (_: null)) // {
     make =
       {
         kind,
@@ -92,6 +101,24 @@ in
     # `component.define { user = component.actor "End User"; ... }` attaches the
     # attribute name as `id`, producing handles usable wherever an id is accepted.
     define = attrs: lib.mapAttrs (name: node: node // { id = name; }) attrs;
+    # `component.of [ ty.a ty.b ] label`/`{ label; ... }`: kind is derived from
+    # the types (unless `kind` is given explicitly).
+    of =
+      typesArg: arg:
+      let
+        spec = if isAttrs arg then arg else { label = arg; };
+      in
+      spec // { types = normalizeTypes typesArg; };
+  };
+
+  # Semantic types: `types.define { deployed-service = { label; kind?; color?; }; }`
+  # attaches each attribute name as `id` and returns handles.
+  types = {
+    define =
+      attrs:
+      lib.mapAttrs (
+        name: spec: (if isString spec then { label = spec; } else spec) // { id = name; }
+      ) attrs;
   };
 
   boundary = mkBoundary;

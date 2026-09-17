@@ -11,9 +11,11 @@ derived from the messages exchanged in the sequence diagrams.
 - [Login Flow — Components](./login-flow-architecture.md)
 - [Token Refresh — Components](./token-refresh-architecture.md)
 - [Job Processing — Components](./job-processing-architecture.md)
+- [Service → Database — Components](./service-calls-db-architecture.md)
 
 ## Sequences
 
 - [Login Flow](./login-flow.md)
 - [Token Refresh](./token-refresh.md)
 - [Job Processing](./job-processing.md)
+- [Service → Database](./service-calls-db.md)

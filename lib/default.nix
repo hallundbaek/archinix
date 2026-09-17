@@ -2,13 +2,22 @@
 let
   mermaid = import ./mermaid.nix { inherit lib; };
   components = import ./components.nix { inherit lib mermaid; };
-  sequence = import ./sequence.nix { inherit lib mermaid components; };
+  typeUtils = import ./types.nix { inherit lib mermaid components; };
+  sequence = import ./sequence.nix {
+    inherit
+      lib
+      mermaid
+      components
+      typeUtils
+      ;
+  };
   architecture = import ./architecture.nix {
     inherit
       lib
       mermaid
       components
       sequence
+      typeUtils
       ;
   };
   markdown = import ./markdown.nix { inherit lib; };
@@ -21,25 +30,42 @@ let
     model:
     let
       comps = model.components or { };
+      types = model.types or { };
       seqsRaw = model.sequences or { };
       arch = model.architecture or { };
+
+      typeMembers = typeUtils.members comps types;
       seqs = map (id: {
         inherit id;
         seq = seqsRaw.${id};
       }) (builtins.attrNames seqsRaw);
 
       compErrs = components.validate comps;
+      typeRegErrs = typeUtils.validateRegistry types;
+      typeUseErrs = typeUtils.validateUsage { inherit types comps; };
 
       seqErrs = lib.concatLists (
-        lib.mapAttrsToList (id: seq: sequence.validate { inherit comps id seq; }) seqsRaw
+        lib.mapAttrsToList (
+          id: seq:
+          sequence.validate {
+            inherit
+              comps
+              types
+              id
+              seq
+              ;
+          }
+        ) seqsRaw
       );
 
-      derivedKeys = architecture.edgeKeys seqs;
+      derivedKeys = architecture.edgeKeys seqs types typeMembers;
+      originKeys = architecture.originKeys seqs;
+      validLabelKeys = derivedKeys ++ originKeys;
 
       edgeLabelErrs = lib.concatMap (
         k:
-        lib.optional (!(lib.elem k derivedKeys))
-          "architecture.edgeLabels has key `${k}` which no sequence message produces (expected one of: ${lib.concatStringsSep ", " derivedKeys})"
+        lib.optional (!(lib.elem k validLabelKeys))
+          "architecture.edgeLabels has key `${k}` which no sequence message produces (expected one of: ${lib.concatStringsSep ", " validLabelKeys})"
       ) (builtins.attrNames (arch.edgeLabels or { }));
 
       labelMode = arch.labelMode or "explicit";
@@ -58,7 +84,7 @@ let
         slugDupes != [ ]
       ) "sequence ids produce duplicate slugs: ${lib.concatStringsSep ", " slugDupes}";
     in
-    compErrs ++ seqErrs ++ edgeLabelErrs ++ labelModeErrs ++ slugErrs;
+    compErrs ++ typeRegErrs ++ typeUseErrs ++ seqErrs ++ edgeLabelErrs ++ labelModeErrs ++ slugErrs;
 
   # ---------------------------------------------------------------------------
   # Rendering.
@@ -67,11 +93,14 @@ let
     model:
     let
       comps = model.components or { };
+      types = model.types or { };
       seqsRaw = model.sequences or { };
       arch = model.architecture or { };
 
       errors = validateModel model;
       throwErrors = throw ("architecture model is invalid:\n" + lib.concatStringsSep "\n" errors);
+
+      typeMembers = typeUtils.members comps types;
 
       seqOrder = arch.sequenceOrder or (builtins.attrNames seqsRaw);
       seqs = map (id: {
@@ -95,7 +124,7 @@ let
           title = seqTitle s;
           description = s.seq.description or null;
           code = sequence.render {
-            inherit comps;
+            inherit comps types;
             seq = s.seq;
           };
           related = [
@@ -119,8 +148,11 @@ let
         markdown.page {
           title = viewTitle s;
           code = architecture.renderGraph {
-            inherit comps;
-            nodes = architecture.nodesForSequence { seq = s.seq; };
+            inherit comps types typeMembers;
+            nodes = architecture.nodesForSequence {
+              seq = s.seq;
+              inherit types typeMembers;
+            };
             seqs = [ s ];
             cfg = arch;
             title = viewTitle s;
@@ -144,8 +176,13 @@ let
       archPage = markdown.page {
         title = archTitle;
         code = architecture.renderGraph {
-          inherit comps seqs;
-          nodes = architecture.globalNodes seqs;
+          inherit
+            comps
+            types
+            typeMembers
+            seqs
+            ;
+          nodes = architecture.globalNodes { inherit seqs types typeMembers; };
           cfg = arch;
           title = archTitle;
         };
@@ -218,6 +255,7 @@ in
   inherit
     mermaid
     components
+    typeUtils
     sequence
     architecture
     markdown

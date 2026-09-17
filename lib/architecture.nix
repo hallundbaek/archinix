@@ -3,6 +3,7 @@
   mermaid,
   components,
   sequence,
+  typeUtils,
 }:
 let
   inherit (mermaid)
@@ -86,22 +87,65 @@ let
 
   pushUnique = acc: x: if lib.elem x acc then acc else acc ++ [ x ];
 
-  # Nodes for one sequence: declared/inferred participants first, then anything
-  # referenced (created participants and message endpoints).
-  seqNodes =
-    { seq, ... }:
-    lib.foldl' pushUnique (sequence.effectiveParticipants seq) (walkNodes' (seq.steps or [ ]));
+  isType = types: id: lib.isString id && types ? ${id};
 
-  walkNodes' = xs: lib.concatMap walkNodes xs;
+  # Expand a reference to the concrete component ids it denotes.
+  instances =
+    types: typeMembers: id:
+    if isType types id then typeMembers.${id} or [ ] else [ id ];
+
+  expandIds =
+    types: typeMembers: ids:
+    lib.concatMap (instances types typeMembers) ids;
+
+  # Nodes for one sequence: participants and message endpoints, with types
+  # expanded to their instances.
+  seqNodes =
+    {
+      seq,
+      types,
+      typeMembers,
+    }:
+    lib.unique (
+      expandIds types typeMembers (
+        sequence.effectiveParticipants seq ++ lib.concatMap walkNodes (seq.steps or [ ])
+      )
+    );
 
   edgeKey = e: "${e.from}->${e.to}";
+  originKey = o: "${o.from}->${o.to}";
+
+  # Messages with each type endpoint expanded to its concrete instances.
+  expandMessages =
+    types: typeMembers: messages:
+    lib.concatMap (
+      m:
+      let
+        froms = instances types typeMembers m.from;
+        tos = instances types typeMembers m.to;
+      in
+      lib.concatMap (
+        f:
+        lib.concatMap (
+          t:
+          lib.optional (f != t) {
+            from = f;
+            to = t;
+            label = m.label;
+            origin = {
+              from = m.from;
+              to = m.to;
+            };
+          }
+        ) tos
+      ) froms
+    ) messages;
 
   # Aggregate messages across sequences into distinct edges.
   aggregate =
-    seqs:
+    seqs: types: typeMembers:
     let
       allMessages = lib.concatMap (s: walkList (s.seq.steps or [ ])) seqs;
-      withoutSelf = lib.filter (m: m.from != m.to) allMessages;
     in
     lib.foldl' (
       acc: m:
@@ -115,19 +159,44 @@ let
           to = m.to;
           count = (acc.${k}.count or 0) + 1;
           labels = (acc.${k}.labels or [ ]) ++ [ m.label ];
+          origins = lib.unique ((acc.${k}.origins or [ ]) ++ [ (originKey m.origin) ]);
         };
       }
-    ) { } withoutSelf;
+    ) { } (expandMessages types typeMembers allMessages);
+
+  messagesOf = seqs: lib.concatMap (s: walkList (s.seq.steps or [ ])) seqs;
 in
 rec {
   # Ordered unique nodes across all sequences.
-  globalNodes = seqs: lib.foldl' pushUnique [ ] (lib.concatMap seqNodes seqs);
+  globalNodes =
+    {
+      seqs,
+      types,
+      typeMembers,
+    }:
+    lib.foldl' pushUnique [ ] (lib.concatMap (seqNodesOf types typeMembers) seqs);
 
   nodesForSequence = seqNodes;
 
-  edges = seqs: aggregate seqs;
+  seqNodesOf =
+    types: typeMembers: s:
+    seqNodes {
+      inherit (s) seq;
+      inherit types typeMembers;
+    };
 
-  edgeKeys = seqs: builtins.attrNames (aggregate seqs);
+  edges =
+    seqs: types: typeMembers:
+    aggregate seqs types typeMembers;
+
+  # Concrete "from->to" keys a message produces.
+  edgeKeys =
+    seqs: types: typeMembers:
+    builtins.attrNames (aggregate seqs types typeMembers);
+
+  # Un-expanded "from->to" keys (component or type pairs) used by messages; these
+  # are also valid `edgeLabels` keys and apply to every expansion.
+  originKeys = seqs: lib.unique (map (m: "${m.from}->${m.to}") (messagesOf seqs));
 
   # ---------------------------------------------------------------------------
   # Graph rendering.
@@ -138,13 +207,15 @@ rec {
       nodes,
       seqs,
       cfg,
+      types,
+      typeMembers,
       title,
     }:
     let
       direction = cfg.direction or "TD";
       labelMode = cfg.labelMode or "explicit";
       edgeLabels = cfg.edgeLabels or { };
-      aggr = aggregate seqs;
+      aggr = aggregate seqs types typeMembers;
 
       initLines = lib.optional (cfg ? config) "%%{init: ${builtins.toJSON cfg.config} }%%";
 
@@ -157,7 +228,9 @@ rec {
         else
           throw "architecture references unknown component `${id}`";
 
-      nodeLine = leaf: "${leaf.name}${shape leaf.kind (quote leaf.label)}";
+      kindOf = id: typeUtils.resolveKind types (leafById id);
+
+      nodeLine = leaf: "${leaf.name}${shape (kindOf leaf.name) (quote leaf.label)}";
 
       renderTree =
         nodeList:
@@ -175,13 +248,17 @@ rec {
             lib.optional (lib.elem node.name nodeSet) (nodeLine node)
         ) nodeList;
 
+      explicitLabel =
+        e:
+        edgeLabels.${edgeKey e}
+        or (lib.foldl' (acc: o: if acc != "" then acc else edgeLabels.${o} or "") "" e.origins);
+
       renderEdge =
         e:
         let
-          k = edgeKey e;
           label =
             if labelMode == "explicit" then
-              edgeLabels.${k} or ""
+              explicitLabel e
             else if labelMode == "derived" then
               lib.concatStringsSep "<br/>" (lib.unique (map escape e.labels))
             else if labelMode == "count" then
@@ -195,7 +272,7 @@ rec {
         b: lib.any (n: lib.elem n nodeSet) (leafIdsIn comps b.path)
       ) (flatten comps).boundaries;
 
-      styleLines = lib.filter (l: l != "") (
+      boundaryStyleLines = lib.filter (l: l != "") (
         map (
           b:
           if b.color == null then
@@ -208,7 +285,20 @@ rec {
         ) usedBoundaries
       );
 
-      classLines = map (n: "class ${n} ${(leafById n).kind}") nodeSet;
+      coloredLeaves = lib.filter (
+        n: lib.elem n nodeSet && (typeUtils.resolveColor types (leafById n)) != null
+      ) (builtins.attrNames flat.leaves);
+
+      leafStyleLines = map (
+        n:
+        let
+          c = typeUtils.resolveColor types (leafById n);
+          sc = styleColor c;
+        in
+        "style ${n} fill:${sc},stroke:#4a5568,color:${styleText c}"
+      ) coloredLeaves;
+
+      classLines = map (n: "class ${n} ${kindOf n}") nodeSet;
     in
     mermaid.lines (
       initLines
@@ -217,7 +307,8 @@ rec {
       ++ map renderEdge (lib.attrValues aggr)
       ++ classDefs
       ++ classLines
-      ++ styleLines
+      ++ leafStyleLines
+      ++ boundaryStyleLines
     );
 
   # Leaf ids that live under a given boundary path.

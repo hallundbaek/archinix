@@ -7,6 +7,7 @@ subgraph b_core["Core Services"]
 auth["Auth Service"]
 db[("PostgreSQL")]
 gateway(("API Gateway"))
+orders["Orders API"]
 subgraph b_core_workers["Worker Pool"]
 queue[/"Job Queue"/]
 worker[["Worker"]]
@@ -27,10 +28,11 @@ db --> gateway
 db --> queue
 db --> worker
 gateway -->|"gRPC"| auth
-gateway --> db
+gateway -->|"SQL"| db
 gateway -->|"AMQP"| queue
 gateway --> web
 idp --> auth
+orders -->|"SQL"| db
 queue --> gateway
 queue --> worker
 user --> web
@@ -54,6 +56,13 @@ class db database
 class idp entity
 class queue queue
 class worker collections
+class orders participant
+style auth fill:#3182ce,stroke:#4a5568,color:#f7fafc
+style db fill:#805ad5,stroke:#4a5568,color:#f7fafc
+style gateway fill:#3182ce,stroke:#4a5568,color:#f7fafc
+style orders fill:#3182ce,stroke:#4a5568,color:#f7fafc
+style queue fill:#38a169,stroke:#4a5568,color:#f7fafc
+style worker fill:#38a169,stroke:#4a5568,color:#f7fafc
 style b_core fill:#2D3748,stroke:#4a5568,color:#f7fafc
 style b_edge fill:#2d333b,stroke:#4a5568,color:#f7fafc
 ```
@@ -64,3 +73,4 @@ style b_edge fill:#2d333b,stroke:#4a5568,color:#f7fafc
 - [Login Flow](./login-flow.md)
 - [Token Refresh](./token-refresh.md)
 - [Job Processing](./job-processing.md)
+- [Service → Database](./service-calls-db.md)

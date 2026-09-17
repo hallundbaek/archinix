@@ -1,22 +1,51 @@
 { archinix }:
 with archinix;
 let
+  # Semantic types. `label` is required; `kind` and `color` are optional.
+  ty = types.define {
+    deployed-service = {
+      label = "Deployed Service";
+      color = "#3182ce";
+    };
+    queue-consumer = {
+      label = "Queue Consumer";
+      kind = "queue";
+      color = "#38a169";
+    };
+    database = {
+      label = "Database";
+      kind = "database";
+      color = "#805ad5";
+    };
+  };
+
   # `component.define` turns the attribute names into component ids and returns
   # handles: use `c.user` wherever a component is referenced.
   c = component.define {
     user = component.actor "End User";
     web = component.boundary "Web App";
-    gateway = component.control "API Gateway";
-    auth = component.participant "Auth Service" // {
+    gateway = component.control [ ty.deployed-service ] "API Gateway";
+    auth = component.participant [ ty.deployed-service ] "Auth Service" // {
       # Actor-menu links render for participant/database/collections/queue,
       # but Mermaid crashes on actor/boundary/control/entity (see README).
       links = [ (link "Runbook" "https://wiki.example/auth") ];
     };
-    db = component.database "PostgreSQL" // {
+    orders = component.participant [ ty.deployed-service ] "Orders API";
+    db = component.database [ ty.database ] "PostgreSQL" // {
       links = [ (link "Metrics" "https://grafana.example/db") ];
     };
-    queue = component.queue "Job Queue";
-    worker = component.collections "Worker";
+    queue = component.of [ ty.queue-consumer ] "Job Queue";
+    worker =
+      component.collections
+        [
+          ty.deployed-service
+          ty.queue-consumer
+        ]
+        {
+          label = "Worker";
+          # The two types imply different colours; an explicit colour silences it.
+          color = "#38a169";
+        };
     idp = component.entity "Identity Provider";
   };
 in
@@ -45,7 +74,12 @@ in
           color = "rgb(45, 55, 72)";
         }
         {
-          inherit (c) gateway auth db;
+          inherit (c)
+            gateway
+            auth
+            orders
+            db
+            ;
           workers = boundary "Worker Pool" { inherit (c) queue worker; };
         };
 
@@ -53,6 +87,9 @@ in
     # outside every architecture subgraph.
     inherit (c) idp;
   };
+
+  # The semantic type registry (consumed by validation and rendering).
+  types = ty;
 
   sequences = {
     login-flow = {
@@ -190,6 +227,26 @@ in
         (destroy c.worker)
       ];
     };
+
+    # A type-level interaction template: actors are types, not components. The
+    # architecture expands each type endpoint to every component of that type.
+    service-calls-db = {
+      title = "Service → Database";
+      description = ''
+        Every deployed service queries the database.
+
+        This sequence is written once against the types; the architecture shows
+        the resulting **orders → db**, **auth → db** and **gateway → db** edges
+        without a sequence per service.
+      '';
+      participants = [
+        ty.deployed-service
+        ty.database
+      ];
+      steps = [
+        (message.solidArrow ty.deployed-service ty.database "query")
+      ];
+    };
   };
 
   architecture = {
@@ -200,6 +257,7 @@ in
       "login-flow"
       "token-refresh"
       "job-processing"
+      "service-calls-db"
     ];
     edgeLabels = {
       "web->gateway" = "HTTPS";
@@ -208,6 +266,7 @@ in
       "auth->idp" = "OIDC";
       "gateway->queue" = "AMQP";
       "worker->db" = "SQL";
+      "deployed-service->database" = "SQL";
     };
     config = {
       look = "neo";

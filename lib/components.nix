@@ -10,6 +10,27 @@ let
 
   pathId = path: "b_" + lib.concatStringsSep "_" path;
 
+  # Resolve a reference without throwing, so structural validation can report
+  # bad values instead of crashing. Values that cannot be resolved are kept.
+  safeResolveId =
+    x:
+    if lib.isString x then
+      x
+    else if lib.isAttrs x && x ? id then
+      x.id
+    else
+      x;
+
+  # A component's semantic types, from `types` (list), a bare `types` value, or
+  # the `type` alias.
+  componentTypes =
+    node:
+    let
+      raw = node.types or node.type or [ ];
+      list = if lib.isList raw then raw else [ raw ];
+    in
+    lib.unique (map safeResolveId list);
+
   # Normalize one raw node into a boundary or leaf node.
   mkNode =
     path: name: node:
@@ -26,7 +47,10 @@ let
       {
         type = "leaf";
         inherit name path;
-        inherit (node) label kind;
+        label = node.label;
+        kind = node.kind or null;
+        color = node.color or null;
+        componentTypes = componentTypes node;
         links = node.links or [ ];
         boundaryPath = lib.lists.init path;
         topBoundary = if path == [ ] then null else lib.head path;
@@ -133,6 +157,9 @@ rec {
           node ? kind
         ) "${here}: boundary must not define `kind` (only leaves are components)")
         ++ (lib.optional (
+          node ? types || node ? type
+        ) "${here}: boundary must not define `types` (only leaves are components)")
+        ++ (lib.optional (
           node ? color && !(validColor node.color)
         ) "${here}: invalid boundary color `#${toString (node.color or null)}`")
         ++ lib.concatLists (lib.mapAttrsToList (n: c: rawErrors (path ++ [ name ]) n c) node.components)
@@ -143,8 +170,29 @@ rec {
         ++ (lib.optional (
           !(node ? label) || !(isString node.label)
         ) "${here}: component is missing a string `label`")
-        ++ (lib.optional (!(node ? kind) || !(lib.elem node.kind kindEnum))
+        ++ (lib.optional (node ? kind && !(lib.elem node.kind kindEnum))
           "${here}: component has invalid `kind` `${toString (node.kind or null)}`; expected one of: ${lib.concatStringsSep ", " kindEnum}`"
+        )
+        ++ (lib.optional (
+          node ? color && !(validColor node.color)
+        ) "${here}: invalid component color `${toString (node.color or null)}`")
+        ++ (lib.optional (node ? types && node ? type) "${here}: use either `types` or `type`, not both")
+        ++ (
+          if node ? types || node ? type then
+            let
+              raw = node.types or node.type;
+              entries = if lib.isList raw then raw else [ raw ];
+            in
+            lib.concatLists (
+              lib.imap0 (
+                i: t:
+                lib.optional (
+                  !(isString t) && !(lib.isAttrs t && t ? id)
+                ) "${here}.types[${toString i}]: expected a type id or a type handle"
+              ) entries
+            )
+          else
+            [ ]
         )
         ++ lib.concatLists (
           lib.imap0 (
@@ -168,5 +216,5 @@ rec {
     errs ++ lib.optional (dupes != [ ]) "duplicate component ids: ${lib.concatStringsSep ", " dupes}";
 }
 // {
-  inherit resolveId;
+  inherit resolveId safeResolveId;
 }
