@@ -10,6 +10,14 @@ let
 
   pathId = path: "b_" + lib.concatStringsSep "_" path;
 
+  # Ancestor references are encoded as "@<up>:<id>" (component ids cannot
+  # contain "@" or ":").
+  refMatch = builtins.match "@([0-9]+):(.+)";
+  isRef = s: lib.isString s && refMatch s != null;
+  refDepth = s: builtins.fromJSON (builtins.elemAt (refMatch s) 0);
+  refName = s: builtins.elemAt (refMatch s) 1;
+  refNodeId = s: "anc_${toString (refDepth s)}_${refName s}";
+
   # Resolve a reference without throwing, so structural validation can report
   # bad values instead of crashing. Values that cannot be resolved are kept.
   safeResolveId =
@@ -17,9 +25,19 @@ let
     if lib.isString x then
       x
     else if lib.isAttrs x && x ? id then
-      x.id
+      (if (x.up or 0) > 0 then "@${toString x.up}:${x.id}" else x.id)
     else
       x;
+
+  # Resolve a component reference: an id string or a handle (local or ancestor).
+  resolveId =
+    x:
+    if lib.isString x then
+      x
+    else if lib.isAttrs x && x ? id then
+      (if (x.up or 0) > 0 then "@${toString x.up}:${x.id}" else x.id)
+    else
+      throw "expected a component id (string) or a handle; got ${builtins.typeOf x}";
 
   # A component's semantic types, from `types` (list), a bare `types` value, or
   # the `type` alias.
@@ -51,6 +69,8 @@ let
         kind = node.kind or null;
         color = node.color or null;
         componentTypes = componentTypes node;
+        child = node.child or null;
+        hasChild = (node.child or null) != null;
         links = node.links or [ ];
         boundaryPath = lib.lists.init path;
         topBoundary = if path == [ ] then null else lib.head path;
@@ -71,17 +91,6 @@ let
     boundaries = [ ];
     entries = [ ];
   };
-
-  # Resolve a component reference: either a plain id string or a handle created
-  # by `component.define` (an attrset carrying `id`).
-  resolveId =
-    x:
-    if lib.isString x then
-      x
-    else if lib.isAttrs x && x ? id then
-      x.id
-    else
-      throw "expected a component id (string) or a handle from component.define; got ${builtins.typeOf x}";
 in
 rec {
   mkTree = components: tree components;
@@ -160,6 +169,9 @@ rec {
           node ? types || node ? type
         ) "${here}: boundary must not define `types` (only leaves are components)")
         ++ (lib.optional (
+          node ? child
+        ) "${here}: boundary must not define `child` (only leaves can own a sub-architecture)")
+        ++ (lib.optional (
           node ? color && !(validColor node.color)
         ) "${here}: invalid boundary color `#${toString (node.color or null)}`")
         ++ lib.concatLists (lib.mapAttrsToList (n: c: rawErrors (path ++ [ name ]) n c) node.components)
@@ -177,6 +189,9 @@ rec {
           node ? color && !(validColor node.color)
         ) "${here}: invalid component color `${toString (node.color or null)}`")
         ++ (lib.optional (node ? types && node ? type) "${here}: use either `types` or `type`, not both")
+        ++ (lib.optional (
+          node ? child && !(lib.isPath node.child || isString node.child)
+        ) "${here}: `child` must be a path to a child model")
         ++ (
           if node ? types || node ? type then
             let
@@ -216,5 +231,12 @@ rec {
     errs ++ lib.optional (dupes != [ ]) "duplicate component ids: ${lib.concatStringsSep ", " dupes}";
 }
 // {
-  inherit resolveId safeResolveId;
+  inherit
+    resolveId
+    safeResolveId
+    isRef
+    refDepth
+    refName
+    refNodeId
+    ;
 }

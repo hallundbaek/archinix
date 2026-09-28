@@ -63,6 +63,7 @@ details gateway: tier: edge
 
 ## Related
 
-- [Overview](./README.md)
-- [Acme Platform](./architecture.md)
-- [Login Flow — Components](./login-flow-architecture.md)
+- [Overview](README.md)
+- [Acme Platform](architecture.md)
+- [Login Flow — Components](login-flow-architecture.md)
+

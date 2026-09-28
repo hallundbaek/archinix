@@ -27,6 +27,8 @@ classDef entity fill:#fffaf0,stroke:#dd6b20,color:#1a202c
 classDef database fill:#faf5ff,stroke:#805ad5,color:#1a202c
 classDef collections fill:#f0fff4,stroke:#38a169,color:#1a202c
 classDef queue fill:#fff5f5,stroke:#e53e3e,color:#1a202c
+classDef composite fill:#edf2f7,stroke:#4a5568,stroke-width:3px,color:#1a202c
+classDef ancestor fill:#f7fafc,stroke:#718096,stroke-dasharray:5,5,color:#1a202c
 class gateway control
 class queue queue
 class db database
@@ -40,6 +42,7 @@ style b_core fill:#2D3748,stroke:#4a5568,color:#f7fafc
 
 ## Related
 
-- [Overview](./README.md)
-- [Job Processing](./job-processing.md)
-- [Acme Platform](./architecture.md)
+- [Overview](README.md)
+- [Job Processing](job-processing.md)
+- [Acme Platform](architecture.md)
+

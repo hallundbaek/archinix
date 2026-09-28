@@ -5,13 +5,11 @@ generated from the `model/` directory in Nix: the architecture overviews are
 derived from the messages exchanged in the sequence diagrams.
 
 
-## Architecture
+## Architectures
 
-- [Acme Platform](./architecture.md)
-- [Login Flow — Components](./login-flow-architecture.md)
-- [Token Refresh — Components](./token-refresh-architecture.md)
-- [Job Processing — Components](./job-processing-architecture.md)
-- [Service → Database — Components](./service-calls-db-architecture.md)
+- [Acme Platform Architecture](./architecture.md)
+- [fleet](./fleet/architecture.md)
+- [fleet / runner](./fleet/runner/architecture.md)
 
 ## Sequences
 
@@ -19,3 +17,6 @@ derived from the messages exchanged in the sequence diagrams.
 - [Token Refresh](./token-refresh.md)
 - [Job Processing](./job-processing.md)
 - [Service → Database](./service-calls-db.md)
+- [fleet: Process Job](./fleet/process.md)
+- [fleet / runner: Runner Tick](./fleet/runner/tick.md)
+

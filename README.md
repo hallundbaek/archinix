@@ -44,14 +44,41 @@ Then edit `model/default.nix` to describe your own system and re-run
 ├── lib/                   # the renderer library (pure nixpkgs.lib)
 │   ├── mermaid.nix        # low-level Mermaid primitives
 │   ├── components.nix     # component tree + validation
+│   ├── types.nix          # semantic types + resolution
+│   ├── nesting.nix        # nested models + ancestor refs
 │   ├── sequence.nix       # sequence diagrams
 │   ├── architecture.nix   # derives architecture from sequences
 │   ├── markdown.nix       # page assembly and cross-links
+│   ├── mkOutputs.nix      # flake-input API
 │   ├── preview/           # live preview server (Markdown + Mermaid)
 │   └── default.nix        # public API
 ├── model/default.nix      # YOUR architecture lives here
+├── templates/minimal/     # input-based project template (only model/)
 └── docs/                  # generated, committed
 ```
+
+## Using Archinix as a flake input
+
+Add Archinix as an input and keep only `flake.nix` + `model/` in your project:
+
+```nix
+# flake.nix
+{
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+  inputs.archinix.url = "github:hallundbaek/archinix";
+
+  outputs = { self, nixpkgs, archinix }:
+    archinix.lib.mkOutputs {
+      inherit nixpkgs;
+      model = import ./model { archinix = archinix.lib.dsl; };
+      # docsPath = ./docs;   # enable the docs-up-to-date check once committed
+    };
+}
+```
+
+`mkOutputs` provides `packages.docs`, `apps.render`/`watch`/`check-mermaid`,
+`checks.docs-up-to-date` (when `docsPath` is given), `devShells` and `formatter`.
+`nix flake init -t github:hallundbaek/archinix` scaffolds exactly this.
 
 ## Commands
 
@@ -221,6 +248,57 @@ flowchart TD
 applied to every expansion) or a concrete pair (`"orders->db"`, which overrides).
 A type used by a sequence must have at least one instance, and a type cannot be
 used with `create`/`destroy`.
+
+## Nested architectures
+
+A component can own a **sub-architecture** with `component.sub`, nesting
+arbitrarily deep. The library imports the child model; child models take
+`{ archinix, parent }` and can refer to ancestor components through `parent`:
+
+```nix
+# model/default.nix
+fleet = component.sub ./worker "Worker Fleet";
+```
+```nix
+# model/worker/default.nix
+{ archinix, parent }:
+with archinix;
+let c = component.define { runner = component.sub ./runner "Job Runner"; queue = component.queue "Queue"; };
+in {
+  components = { fleet = boundary "Worker Fleet" { inherit (c) queue runner; }; };
+  sequences.process.steps = [
+    (message.dottedArrow c.queue c.runner "deliver")
+    (message.solidArrow c.runner parent.db "write result")     # ancestor (immediate parent)
+  ];
+}
+```
+```nix
+# model/worker/runner/default.nix
+{ archinix, parent }:
+with archinix;
+let c = component.define { proc = component.participant "Process"; };
+in {
+  components = { runner = boundary "Runner" { inherit (c) proc; }; };
+  sequences.tick.steps = [
+    (message.solidArrow c.proc parent.parent.db "SELECT next") # grandparent, arbitrary depth
+  ];
+}
+```
+
+- `parent` exposes the parent's component handles directly (`parent.db`) plus
+  `parent.types` and `parent.parent` (the next ancestor up). `parent` and
+  `types` are reserved names in that namespace.
+- A child sequence shows the ancestor as an **external actor**; the ancestor's
+  architecture shows a **lifted edge** between the composite and the referenced
+  component, and this is **mirrored at every level** along the path (each
+  intermediate level shows the composite connecting to an external node for the
+  ancestor). External nodes render dashed; components that own a sub-architecture
+  render with the `composite` class and link to the child page.
+- References target **components** (not types or types of ancestors); typos in a
+  handle (e.g. `parent.nope`) fail at evaluation, and a reference that resolves
+  to a non-component fails validation.
+- Nested pages are emitted as subdirectories (`docs/fleet/…`,
+  `docs/fleet/runner/…`) with relative cross-links; the index lists every level.
 
 ## Defining sequences
 
@@ -454,6 +532,10 @@ message produces, and duplicate sequence slugs.
 - **Type expansion is a global cross product:** one type-level message produces
   an edge for every source instance × target instance, so many instances yield
   many edges. Types used by a sequence must have at least one instance.
+- **Nested references:** the ancestor context uses `parent` and `types` as
+  reserved keys, and a child→ancestor reference is mirrored at every level from
+  the target up to the referring model (the composite connects to an external
+  node at intermediate levels).
 - **New files in a Git checkout:** Nix evaluates a Git flake from the tracked
   tree, so a newly added `model/*.nix` must be `git add`ed before `render` (or
   the `watch` preview) will see it. Edits to already-tracked files are picked up

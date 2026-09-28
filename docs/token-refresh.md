@@ -54,6 +54,7 @@ auth <<-->> gateway: session sync
 
 ## Related
 
-- [Overview](./README.md)
-- [Acme Platform](./architecture.md)
-- [Token Refresh — Components](./token-refresh-architecture.md)
+- [Overview](README.md)
+- [Acme Platform](architecture.md)
+- [Token Refresh — Components](token-refresh-architecture.md)
+

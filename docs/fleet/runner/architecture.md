@@ -1,0 +1,30 @@
+# Job Runner
+
+```mermaid
+flowchart TD
+subgraph b_runner["Runner"]
+proc["Process"]
+end
+anc_2_db[("PostgreSQL")]
+proc -->|"SELECT next"| anc_2_db
+anc_2_db -->|"row"| proc
+classDef actor fill:#eef0ff,stroke:#5a67d8,color:#1a202c
+classDef participant fill:#eaf5ff,stroke:#3182ce,color:#1a202c
+classDef boundary fill:#edf2f7,stroke:#4a5568,color:#1a202c
+classDef control fill:#e6fffa,stroke:#319795,color:#1a202c
+classDef entity fill:#fffaf0,stroke:#dd6b20,color:#1a202c
+classDef database fill:#faf5ff,stroke:#805ad5,color:#1a202c
+classDef collections fill:#f0fff4,stroke:#38a169,color:#1a202c
+classDef queue fill:#fff5f5,stroke:#e53e3e,color:#1a202c
+classDef composite fill:#edf2f7,stroke:#4a5568,stroke-width:3px,color:#1a202c
+classDef ancestor fill:#f7fafc,stroke:#718096,stroke-dasharray:5,5,color:#1a202c
+class proc participant
+class anc_2_db ancestor
+```
+
+## Related
+
+- [Overview](../../README.md)
+- [Up](../architecture.md)
+- [Runner Tick](tick.md)
+

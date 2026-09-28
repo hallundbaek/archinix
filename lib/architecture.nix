@@ -14,7 +14,7 @@ let
     styleColor
     styleText
     ;
-  inherit (components) flatten;
+  inherit (components) flatten isRef;
 
   # Recursively collect message steps (including inside blocks).
   walkMessages =
@@ -115,30 +115,34 @@ let
   edgeKey = e: "${e.from}->${e.to}";
   originKey = o: "${o.from}->${o.to}";
 
-  # Messages with each type endpoint expanded to its concrete instances.
+  # Messages with each type endpoint expanded to its concrete instances. Messages
+  # with an ancestor reference are skipped here (handled by nesting/lifting).
   expandMessages =
     types: typeMembers: messages:
     lib.concatMap (
       m:
-      let
-        froms = instances types typeMembers m.from;
-        tos = instances types typeMembers m.to;
-      in
-      lib.concatMap (
-        f:
+      if isRef m.from || isRef m.to then
+        [ ]
+      else
+        let
+          froms = instances types typeMembers m.from;
+          tos = instances types typeMembers m.to;
+        in
         lib.concatMap (
-          t:
-          lib.optional (f != t) {
-            from = f;
-            to = t;
-            label = m.label;
-            origin = {
-              from = m.from;
-              to = m.to;
-            };
-          }
-        ) tos
-      ) froms
+          f:
+          lib.concatMap (
+            t:
+            lib.optional (f != t) {
+              from = f;
+              to = t;
+              label = m.label;
+              origin = {
+                from = m.from;
+                to = m.to;
+              };
+            }
+          ) tos
+        ) froms
     ) messages;
 
   # Aggregate messages across sequences into distinct edges.
@@ -160,6 +164,7 @@ let
           count = (acc.${k}.count or 0) + 1;
           labels = (acc.${k}.labels or [ ]) ++ [ m.label ];
           origins = lib.unique ((acc.${k}.origins or [ ]) ++ [ (originKey m.origin) ]);
+          fallback = "";
         };
       }
     ) { } (expandMessages types typeMembers allMessages);
@@ -196,7 +201,11 @@ rec {
 
   # Un-expanded "from->to" keys (component or type pairs) used by messages; these
   # are also valid `edgeLabels` keys and apply to every expansion.
-  originKeys = seqs: lib.unique (map (m: "${m.from}->${m.to}") (messagesOf seqs));
+  originKeys =
+    seqs:
+    lib.unique (
+      map (m: "${m.from}->${m.to}") (lib.filter (m: !(isRef m.from) && !(isRef m.to)) (messagesOf seqs))
+    );
 
   # ---------------------------------------------------------------------------
   # Graph rendering.
@@ -209,6 +218,8 @@ rec {
       cfg,
       types,
       typeMembers,
+      externalNodes ? [ ],
+      extraEdges ? [ ],
       title,
     }:
     let
@@ -231,6 +242,8 @@ rec {
       kindOf = id: typeUtils.resolveKind types (leafById id);
 
       nodeLine = leaf: "${leaf.name}${shape (kindOf leaf.name) (quote leaf.label)}";
+
+      externalLine = n: "${n.id}${shape (n.kind or "participant") (quote n.label)}";
 
       renderTree =
         nodeList:
@@ -256,9 +269,10 @@ rec {
       renderEdge =
         e:
         let
+          explicit = explicitLabel e;
           label =
             if labelMode == "explicit" then
-              explicitLabel e
+              (if explicit != "" then explicit else e.fallback or "")
             else if labelMode == "derived" then
               lib.concatStringsSep "<br/>" (lib.unique (map escape e.labels))
             else if labelMode == "count" then
@@ -298,13 +312,31 @@ rec {
         "style ${n} fill:${sc},stroke:#4a5568,color:${styleText c}"
       ) coloredLeaves;
 
-      classLines = map (n: "class ${n} ${kindOf n}") nodeSet;
+      localNodeSet = lib.filter (n: flat.leaves ? ${n}) nodeSet;
+      classLines =
+        map (
+          n: if (leafById n).hasChild then "class ${n} composite" else "class ${n} ${kindOf n}"
+        ) localNodeSet
+        ++ map (n: "class ${n.id} ancestor") externalNodes;
     in
     mermaid.lines (
       initLines
       ++ [ "flowchart ${direction}" ]
       ++ renderTree (components.mkTree comps)
+      ++ map externalLine externalNodes
       ++ map renderEdge (lib.attrValues aggr)
+      ++ map renderEdge (
+        map (
+          e:
+          e
+          // {
+            origins = [ ];
+            fallback = e.label or "";
+            count = 1;
+            labels = [ (e.label or "") ];
+          }
+        ) extraEdges
+      )
       ++ classDefs
       ++ classLines
       ++ leafStyleLines

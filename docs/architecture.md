@@ -6,6 +6,7 @@ flowchart TD
 subgraph b_core["Core Services"]
 auth["Auth Service"]
 db[("PostgreSQL")]
+fleet["Worker Fleet"]
 gateway(("API Gateway"))
 orders["Orders API"]
 subgraph b_core_workers["Worker Pool"]
@@ -40,6 +41,9 @@ web -->|"HTTPS"| gateway
 web --> user
 worker -->|"SQL"| db
 worker --> gateway
+fleet -->|"write result"| db
+fleet -->|"SELECT next"| db
+db -->|"row"| fleet
 classDef actor fill:#eef0ff,stroke:#5a67d8,color:#1a202c
 classDef participant fill:#eaf5ff,stroke:#3182ce,color:#1a202c
 classDef boundary fill:#edf2f7,stroke:#4a5568,color:#1a202c
@@ -48,6 +52,8 @@ classDef entity fill:#fffaf0,stroke:#dd6b20,color:#1a202c
 classDef database fill:#faf5ff,stroke:#805ad5,color:#1a202c
 classDef collections fill:#f0fff4,stroke:#38a169,color:#1a202c
 classDef queue fill:#fff5f5,stroke:#e53e3e,color:#1a202c
+classDef composite fill:#edf2f7,stroke:#4a5568,stroke-width:3px,color:#1a202c
+classDef ancestor fill:#f7fafc,stroke:#718096,stroke-dasharray:5,5,color:#1a202c
 class user actor
 class web boundary
 class gateway control
@@ -57,6 +63,7 @@ class idp entity
 class queue queue
 class worker collections
 class orders participant
+class fleet composite
 style auth fill:#3182ce,stroke:#4a5568,color:#f7fafc
 style db fill:#805ad5,stroke:#4a5568,color:#f7fafc
 style gateway fill:#3182ce,stroke:#4a5568,color:#f7fafc
@@ -69,8 +76,10 @@ style b_edge fill:#2d333b,stroke:#4a5568,color:#f7fafc
 
 ## Related
 
-- [Overview](./README.md)
-- [Login Flow](./login-flow.md)
-- [Token Refresh](./token-refresh.md)
-- [Job Processing](./job-processing.md)
-- [Service → Database](./service-calls-db.md)
+- [Overview](README.md)
+- [Login Flow](login-flow.md)
+- [Token Refresh](token-refresh.md)
+- [Job Processing](job-processing.md)
+- [Service → Database](service-calls-db.md)
+- [Sub-architecture: Worker Fleet](fleet/architecture.md)
+

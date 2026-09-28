@@ -32,10 +32,29 @@ rec {
             "## Related"
             ""
           ]
-          ++ map (l: "- [${l.label}](./${l.href})") related
+          ++ map (l: "- [${l.label}](${l.href})") related
       )
       ++ [ "" ]
     );
+
+  # Relative path from one directory to another file (both relative to the docs
+  # root, "" for the root directory).
+  relPath =
+    fromDir: to:
+    let
+      splitP = s: lib.filter (x: x != "") (lib.splitString "/" s);
+      f = splitP fromDir;
+      t = splitP to;
+      maxN = lib.min (lib.length f) (lib.length t);
+      idxs = lib.range 0 (maxN - 1);
+      common = lib.foldl' (
+        acc: i: if acc == i && lib.elemAt f i == lib.elemAt t i then i + 1 else acc
+      ) 0 idxs;
+      ups = lib.genList (_: "..") (lib.length f - common);
+      downs = lib.drop common t;
+      segs = ups ++ downs;
+    in
+    if segs == [ ] then "." else lib.concatStringsSep "/" segs;
 
   # Index page grouping links into titled sections.
   index =

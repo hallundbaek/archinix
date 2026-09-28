@@ -26,6 +26,7 @@ destroy worker
 
 ## Related
 
-- [Overview](./README.md)
-- [Acme Platform](./architecture.md)
-- [Job Processing — Components](./job-processing-architecture.md)
+- [Overview](README.md)
+- [Acme Platform](architecture.md)
+- [Job Processing — Components](job-processing-architecture.md)
+

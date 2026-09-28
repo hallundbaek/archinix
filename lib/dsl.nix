@@ -109,6 +109,14 @@ in
         spec = if isAttrs arg then arg else { label = arg; };
       in
       spec // { types = normalizeTypes typesArg; };
+    # `component.sub ./child "Label"` / `component.sub ./child { label; ...; }`:
+    # a component that owns a sub-architecture (a nested model).
+    sub =
+      childArg: arg:
+      let
+        spec = if isAttrs arg then arg else { label = arg; };
+      in
+      { kind = "participant"; } // spec // { child = childArg; };
   };
 
   # Semantic types: `types.define { deployed-service = { label; kind?; color?; }; }`

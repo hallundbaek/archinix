@@ -46,6 +46,8 @@ let
           # The two types imply different colours; an explicit colour silences it.
           color = "#38a169";
         };
+    # A component that owns a sub-architecture (see model/worker/).
+    fleet = component.sub ./worker "Worker Fleet";
     idp = component.entity "Identity Provider";
   };
 in
@@ -79,6 +81,7 @@ in
             auth
             orders
             db
+            fleet
             ;
           workers = boundary "Worker Pool" { inherit (c) queue worker; };
         };

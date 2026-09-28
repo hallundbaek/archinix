@@ -23,6 +23,7 @@ deployed-service ->> database: query
 
 ## Related
 
-- [Overview](./README.md)
-- [Acme Platform](./architecture.md)
-- [Service → Database — Components](./service-calls-db-architecture.md)
+- [Overview](README.md)
+- [Acme Platform](architecture.md)
+- [Service → Database — Components](service-calls-db-architecture.md)
+

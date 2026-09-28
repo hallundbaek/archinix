@@ -11,7 +11,12 @@ let
     arrowEnum
     boxColor
     ;
-  inherit (components) flatten resolveId;
+  inherit (components)
+    flatten
+    resolveId
+    isRef
+    refNodeId
+    ;
 
   strings = lib.strings;
   lines = mermaid.lines;
@@ -26,14 +31,28 @@ let
     else
       throw "sequence references unknown component `${id}`";
 
-  # Participant metadata for a component or a semantic type.
+  # Participant metadata for a component, a semantic type, or an ancestor ref.
   getParticipant =
-    comps: types: id:
-    if types ? ${id} then
+    comps: types: resolveRef: id:
+    if isRef id then
+      let
+        h = resolveRef id;
+      in
+      {
+        label = h.label;
+        kind = h.kind or "participant";
+        isType = false;
+        isExternal = true;
+        nodeId = refNodeId id;
+        links = [ ];
+      }
+    else if types ? ${id} then
       {
         label = types.${id}.label;
         kind = types.${id}.kind or "participant";
         isType = true;
+        isExternal = false;
+        nodeId = id;
         links = [ ];
       }
     else
@@ -44,8 +63,13 @@ let
         label = l.label;
         kind = typeUtils.resolveKind types l;
         isType = false;
+        isExternal = false;
+        nodeId = id;
         links = l.links or [ ];
       };
+
+  # Mermaid-safe actor id for a reference or plain id.
+  actorId = id: if isRef id then refNodeId id else id;
 
   decl =
     kind: id: label:
@@ -188,6 +212,7 @@ rec {
       comps,
       seq,
       types,
+      resolveRef,
     }:
     let
       participants = effectiveParticipants seq;
@@ -235,9 +260,9 @@ rec {
         else if step ? note then
           [ (renderNote step.note) ]
         else if step ? activate then
-          [ "activate ${step.activate}" ]
+          [ "activate ${actorId step.activate}" ]
         else if step ? deactivate then
-          [ "deactivate ${step.deactivate}" ]
+          [ "deactivate ${actorId step.deactivate}" ]
         else if step ? create then
           (
             let
@@ -315,7 +340,7 @@ rec {
             else
               "";
         in
-        "${m.from} ${core}${shortcut} ${m.to}: ${escape (m.label or "")}";
+        "${actorId m.from} ${core}${shortcut} ${actorId m.to}: ${escape (m.label or "")}";
 
       renderNote =
         n:
@@ -324,13 +349,13 @@ rec {
           actors = n.actors or [ ];
         in
         if pos == "over" && lib.length actors == 2 then
-          "Note over ${lib.head actors},${lib.elemAt actors 1}: ${escape n.text}"
+          "Note over ${actorId (lib.head actors)},${actorId (lib.elemAt actors 1)}: ${escape n.text}"
         else if pos == "over" then
-          "Note over ${lib.head actors}: ${escape n.text}"
+          "Note over ${actorId (lib.head actors)}: ${escape n.text}"
         else if pos == "left" then
-          "Note left of ${lib.head actors}: ${escape n.text}"
+          "Note left of ${actorId (lib.head actors)}: ${escape n.text}"
         else if pos == "right" then
-          "Note right of ${lib.head actors}: ${escape n.text}"
+          "Note right of ${actorId (lib.head actors)}: ${escape n.text}"
         else
           throw "invalid note position `${toString pos}`";
 
@@ -340,9 +365,9 @@ rec {
           meta = if group.top == null then null else boundaryMeta comps group.top;
           infos = map (id: {
             inherit id;
-            p = getParticipant comps types id;
+            p = getParticipant comps types resolveRef id;
           }) group.members;
-          decls = map (x: decl x.p.kind x.id x.p.label) infos;
+          decls = map (x: decl x.p.kind x.p.nodeId x.p.label) infos;
         in
         if meta == null then
           decls
@@ -362,9 +387,9 @@ rec {
       linkLines = lib.concatMap (
         id:
         let
-          p = getParticipant comps types id;
+          p = getParticipant comps types resolveRef id;
         in
-        map (lk: "link ${id}: ${escape lk.label} @ ${lk.url}") p.links
+        map (lk: "link ${p.nodeId}: ${escape lk.label} @ ${lk.url}") p.links
       ) participants;
     in
     lines (
@@ -387,11 +412,13 @@ rec {
       id,
       seq,
       types,
+      resolveRef,
     }:
     let
       flat = flatten comps;
       isLeaf = n: builtins.isString n && flat.leaves ? ${n};
       isType = n: builtins.isString n && types ? ${n};
+      isExt = n: isRef n;
       memberIds = typeUtils.members comps types;
       hasMembers = t: lib.length (memberIds.${t} or [ ]) > 0;
       participants =
@@ -404,11 +431,12 @@ rec {
         path:
         "sequence `${id}`" + lib.optionalString (path != [ ]) (" > " + lib.concatStringsSep " > " path);
 
-      # An actor reference may name a component or a type; a type must have
-      # concrete instances for the architecture expansion to mean anything.
+      # An actor reference may name a component, a type, or an ancestor ref.
       refErrors =
         here: n:
-        if !(builtins.isString n) then
+        if isExt n then
+          lib.optional (resolveRef n == null) "${here}: `${n}` does not resolve to an ancestor component"
+        else if !(builtins.isString n) then
           [ "${here}: expected a component or type id" ]
         else if isLeaf n then
           [ ]
@@ -420,10 +448,13 @@ rec {
       # Only concrete components can be created or destroyed.
       leafErrors =
         here: n:
-        if !(builtins.isString n) then
+        if isExt n then
+          [ "${here}: `${n}` is an ancestor reference, not a concrete component" ]
+        else if !(builtins.isString n) then
           [ "${here}: expected a component id" ]
         else if isLeaf n then
-          [ ]
+          lib.optional (flat.leaves.${n}.hasChild or false
+          ) "${here}: `${n}` owns a sub-architecture and cannot be created/destroyed"
         else if isType n then
           [ "${here}: `${n}` is a type, not a concrete component" ]
         else
