@@ -16,6 +16,7 @@ let
     resolveId
     isRef
     refNodeId
+    boundaryByPath
     ;
 
   strings = lib.strings;
@@ -95,22 +96,54 @@ let
       flat = flatten comps;
       annotated = map (id: {
         inherit id;
-        # Types (and anything that is not a leaf) are not boxed by a boundary.
-        top = if flat.leaves ? ${id} then flat.leaves.${id}.topBoundary else null;
+        # Types, ancestor refs and root-level leaves are not boxed.
+        bpath = if flat.leaves ? ${id} then flat.leaves.${id}.boundaryPath else null;
+        key = if flat.leaves ? ${id} then lib.concatStringsSep "/" flat.leaves.${id}.boundaryPath else "";
       }) participants;
-      keys = lib.unique (map (a: a.top) annotated);
+      keys = lib.unique (map (a: a.key) annotated);
+      membersOf = k: lib.filter (a: a.key == k) annotated;
     in
     map (k: {
-      top = k;
-      members = map (a: a.id) (lib.filter (a: a.top == k) annotated);
+      key = k;
+      path =
+        let
+          ms = membersOf k;
+          bp = if ms == [ ] then null else (lib.head ms).bpath;
+        in
+        if bp == null then [ ] else bp;
+      members = map (a: a.id) (membersOf k);
     }) keys;
 
-  boundaryMeta =
-    comps: key:
+  # All prefixes of a boundary path, shortest first (["a"]; ["a" "b"]; ...).
+  prefixes = path: map (n: lib.take n path) (lib.range 1 (lib.length path));
+
+  # Box metadata for a boundary path. Mermaid cannot nest boxes, so nested
+  # boundaries are flattened to the innermost one with the ancestor path shown
+  # after a line break. Colour is the innermost boundary's, falling back to the
+  # nearest ancestor that defines one.
+  boxMeta =
+    comps: path:
     let
-      bs = lib.filter (b: lib.length b.path == 1 && b.name == key) (flatten comps).boundaries;
+      byPath = boundaryByPath comps;
+      at = p: byPath.${lib.concatStringsSep "/" p} or null;
+      innermost = at path;
+      ancestorLabels = map (p: (at p).label or "") (lib.lists.init (prefixes path));
+      colors = lib.filter (c: c != null) (
+        map (p: (at p).color or null) (lib.reverseList (prefixes path))
+      );
+      label =
+        escape (if innermost == null then lib.last path else innermost.label)
+        + lib.optionalString (lib.length path > 1) (
+          "<br/>(" + escape (lib.concatStringsSep " / " ancestorLabels) + ")"
+        );
     in
-    if bs == [ ] then null else lib.head bs;
+    if innermost == null then
+      null
+    else
+      {
+        inherit label;
+        color = if colors == [ ] then null else lib.head colors;
+      };
 
   # Actors referenced by a step, in order of appearance (all step kinds).
   stepActors =
@@ -362,7 +395,7 @@ rec {
       renderParticipantGroup =
         group:
         let
-          meta = if group.top == null then null else boundaryMeta comps group.top;
+          meta = if group.path == [ ] then null else boxMeta comps group.path;
           infos = map (id: {
             inherit id;
             p = getParticipant comps types resolveRef id;
@@ -373,12 +406,7 @@ rec {
           decls
         else
           [
-            (
-              if meta.color != null then
-                "box ${boxColor meta.color} ${escape meta.label}"
-              else
-                "box ${escape meta.label}"
-            )
+            (if meta.color != null then "box ${boxColor meta.color} ${meta.label}" else "box ${meta.label}")
           ]
           ++ decls
           ++ [ "end" ];

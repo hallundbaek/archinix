@@ -5,8 +5,10 @@ sequenceDiagram
 accTitle: Job Processing
 box rgb(45,55,72) Core Services
 participant gateway@{ "type": "control" } as API Gateway
-participant queue@{ "type": "queue" } as Job Queue
 participant db@{ "type": "database" } as PostgreSQL
+end
+box rgb(45,55,72) Worker Pool<br/>(Core Services)
+participant queue@{ "type": "queue" } as Job Queue
 end
 link db: Metrics @ https://grafana.example/db
 gateway ->> queue: enqueue(job)

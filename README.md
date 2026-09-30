@@ -160,9 +160,13 @@ Plain id strings still work everywhere, and the equivalent raw form (a plain
 node `{ label = "..."; kind = "..."; }` inside a
 `{ label = "..."; components = { ... }; }` boundary) is also accepted.
 
-Boundaries nest arbitrarily and render as nested `subgraph`s (architecture) and
-as `box` groups (sequence diagrams, top level only). Leaves are grouped into the
-sequence boxes by their top-level boundary.
+Boundaries nest arbitrarily and render as nested `subgraph`s in architecture
+diagrams. In sequence diagrams, Mermaid `box` groups **cannot be nested**
+([mermaid#7664](https://github.com/mermaid-js/mermaid/issues/7664)), so each
+participant is grouped by its **innermost** boundary; when that boundary is
+nested, the ancestor path is shown after a line break, e.g.
+`box innerA<br/>(outer)`. The box colour is the innermost boundary's, falling
+back to the nearest ancestor that defines one.
 
 ### Component kinds
 
