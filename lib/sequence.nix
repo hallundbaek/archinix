@@ -179,28 +179,12 @@ let
     "rgba(0,0,0,0.16)"
   ];
 
-  # A low-opacity tint of a boundary colour (keeps text readable), or null for
-  # colours we cannot translate (named/hsl).
-  tintColor =
-    c:
-    let
-      sc = boxColor c;
-      m = builtins.match "rgb\\(([0-9]+,[0-9]+,[0-9]+)\\)" sc;
-    in
-    if m != null then
-      "rgba(${builtins.elemAt m 0},0.12)"
-    else if builtins.match "rgba\\([^)]*\\)" sc != null then
-      sc
-    else
-      null;
-
+  # A boundary's own colour wins (hex is converted to rgb(); rgba keeps its
+  # alpha/transparency); otherwise fall back to a subtle per-depth default.
   rectColor =
     path: b:
-    let
-      tc = if b != null && b.color != null then tintColor b.color else null;
-    in
-    if tc != null then
-      tc
+    if b != null && b.color != null then
+      boxColor b.color
     else
       lib.elemAt defaultRects (lib.min (lib.length path - 1) (lib.length defaultRects - 1));
 

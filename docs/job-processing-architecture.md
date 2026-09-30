@@ -46,6 +46,7 @@ style queue fill:#38a169,stroke:#4a5568,color:#f7fafc
 style scheduler fill:#3182ce,stroke:#4a5568,color:#f7fafc
 style worker fill:#38a169,stroke:#4a5568,color:#f7fafc
 style b_core fill:#2D3748,stroke:#4a5568,color:#f7fafc
+style b_core_workers fill:#422C21,stroke:#4a5568,color:#f7fafc
 ```
 
 ## Related

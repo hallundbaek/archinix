@@ -10,7 +10,7 @@ participant queue@{ "type": "queue" } as Job Queue
 participant scheduler@{ "type": "control" } as Scheduler
 participant worker@{ "type": "collections" } as Worker
 end
-rect rgba(0,0,0,0.08)
+rect rgb(66,44,33)
 Note over queue,worker: Worker Pool
 rect rgba(0,0,0,0.12)
 Note over scheduler,worker: Processing

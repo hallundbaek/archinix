@@ -86,13 +86,19 @@ in
             ;
           # Four boundary levels (core > workers > processing > executors) so the
           # nested sequence boxes are easy to see.
-          workers = boundary "Worker Pool" {
-            inherit (c) queue;
-            processing = boundary "Processing" {
-              inherit (c) scheduler;
-              executors = boundary "Executors" { inherit (c) worker; };
-            };
-          };
+          workers =
+            boundary
+              {
+                label = "Worker Pool";
+                color = "rgb(66,44,33)";
+              }
+              {
+                inherit (c) queue;
+                processing = boundary "Processing" {
+                  inherit (c) scheduler;
+                  executors = boundary "Executors" { inherit (c) worker; };
+                };
+              };
         };
 
     # A root-level leaf (not inside any boundary): rendered without a box and
