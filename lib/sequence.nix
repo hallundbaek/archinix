@@ -104,6 +104,54 @@ let
   # All non-empty prefixes of a path, shortest first.
   prefixes = path: map (n: lib.take n path) (lib.range 1 (lib.length path));
 
+  # Trie of boundary paths -> direct members and ordered children. `order` lists
+  # "#self" and child names in first-appearance order.
+  buildBoundaryTree =
+    comps: ids:
+    let
+      empty = {
+        members = [ ];
+        children = { };
+        order = [ ];
+      };
+      addOrder = order: tag: if lib.elem tag order then order else order ++ [ tag ];
+      insert =
+        node: path: id:
+        if path == [ ] then
+          node
+          // {
+            members = node.members ++ [ id ];
+            order = addOrder node.order "#self";
+          }
+        else
+          let
+            name = lib.head path;
+            rest = lib.tail path;
+          in
+          node
+          // {
+            children = node.children // {
+              ${name} = insert (node.children.${name} or empty) rest id;
+            };
+            order = addOrder node.order name;
+          };
+    in
+    lib.foldl' (acc: id: insert acc (participantBoundary comps id) id) empty ids;
+
+  # Order participants so each nested boundary's members are adjacent, with the
+  # outermost boundary's direct members first and subgroups following.
+  orderedParticipants =
+    comps: ids:
+    let
+      root = buildBoundaryTree comps ids;
+      collect =
+        node:
+        lib.concatMap (
+          tag: if tag == "#self" then node.members else collect node.children.${tag}
+        ) node.order;
+    in
+    collect root;
+
   # Group participants by their outermost (top-level) boundary, in first
   # appearance order; participants without a boundary are unboxed.
   groupParticipants =
@@ -312,6 +360,20 @@ let
       provided ++ extra
     else
       inferParticipants seq;
+
+  # Participants declared at the top of the diagram, ordered by boundary nesting.
+  # Created participants that live inside a boundary are declared here too (so
+  # they can be grouped and referenced by boundary notes); boundary-less created
+  # participants keep using the `create` directive.
+  declaredParticipants =
+    comps: seq:
+    let
+      base = effectiveParticipants seq;
+      created = listCreated (seq.steps or [ ]);
+      inBoundary = lib.filter (t: participantBoundary comps t != [ ]) created;
+      all = base ++ lib.filter (t: !(lib.elem t base)) inBoundary;
+    in
+    orderedParticipants comps all;
 in
 rec {
   render =
@@ -322,7 +384,7 @@ rec {
       resolveRef,
     }:
     let
-      participants = effectiveParticipants seq;
+      participants = declaredParticipants comps seq;
       steps = seq.steps or [ ];
 
       initJson = lib.optional (seq ? config) "%%{init: ${builtins.toJSON seq.config} }%%";
@@ -371,12 +433,16 @@ rec {
         else if step ? deactivate then
           [ "deactivate ${actorId step.deactivate}" ]
         else if step ? create then
-          (
-            let
-              l = getLeaf comps step.create;
-            in
-            [ (createDecl l.kind step.create l.label) ]
-          )
+          # Created participants inside a boundary are declared up front.
+          if lib.elem step.create participants then
+            [ ]
+          else
+            (
+              let
+                l = getLeaf comps step.create;
+              in
+              [ (createDecl l.kind step.create l.label) ]
+            )
         else if step ? destroy then
           [ "destroy ${step.destroy}" ]
         else if step ? loop then
@@ -509,7 +575,7 @@ rec {
         if seq ? participants && !(builtins.isList seq.participants) then
           [ ]
         else
-          effectiveParticipants seq;
+          declaredParticipants comps seq;
 
       hereAt =
         path:
@@ -605,11 +671,7 @@ rec {
         else if step ? deactivate then
           refErrors here (resolveId step.deactivate)
         else if step ? create then
-          let
-            created = resolveId step.create;
-          in
-          leafErrors here created
-          ++ lib.optional (lib.elem created participants) "${here}: created component `${created}` must not also be listed in participants"
+          leafErrors here (resolveId step.create)
         else if step ? destroy then
           leafErrors here (resolveId step.destroy)
         else if step ? loop then

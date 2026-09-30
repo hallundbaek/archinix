@@ -169,6 +169,13 @@ named by a spanning `Note over …` (rects have no label of their own). Colour
 comes from the boundary (tinted for rects) or a subtle default; participants
 without a boundary stay unboxed.
 
+Participants are ordered so each nested boundary's members are **adjacent**
+(a boundary's direct members first, then its subgroups), which is what lets the
+`Note over <first>,<last>` span the whole group. Consequently, a participant
+declared with `create` that lives inside a boundary is declared up front (so it
+can be grouped and referenced by the note) and its `create` directive is
+omitted; boundary-less created participants keep the `create` directive.
+
 ### Component kinds
 
 `kind` selects both the Mermaid participant stereotype and the architecture node

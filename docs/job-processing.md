@@ -5,15 +5,15 @@ sequenceDiagram
 accTitle: Job Processing
 box rgb(45,55,72) Core Services
 participant gateway@{ "type": "control" } as API Gateway
-participant queue@{ "type": "queue" } as Job Queue
 participant db@{ "type": "database" } as PostgreSQL
+participant queue@{ "type": "queue" } as Job Queue
+participant worker@{ "type": "collections" } as Worker
 end
 rect rgba(0,0,0,0.08)
-Note over queue: Worker Pool
+Note over queue,worker: Worker Pool
 end
 link db: Metrics @ https://grafana.example/db
 gateway ->> queue: enqueue(job)
-create participant worker@{ "type": "collections" } as Worker
 queue -) worker: deliver
 Note right of worker: spin up
 worker ->> db: write result
