@@ -3,12 +3,15 @@
 ```mermaid
 sequenceDiagram
 accTitle: Job Processing
+rect rgba(45,55,72,0.12)
 box rgb(45,55,72) Core Services
 participant gateway@{ "type": "control" } as API Gateway
 participant db@{ "type": "database" } as PostgreSQL
 end
-box rgb(45,55,72) Worker Pool<br/>(Core Services)
+box Worker Pool
 participant queue@{ "type": "queue" } as Job Queue
+end
+Note over gateway,queue: Core Services
 end
 link db: Metrics @ https://grafana.example/db
 gateway ->> queue: enqueue(job)
