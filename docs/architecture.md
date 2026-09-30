@@ -10,8 +10,13 @@ fleet["Worker Fleet"]
 gateway(("API Gateway"))
 orders["Orders API"]
 subgraph b_core_workers["Worker Pool"]
-queue[/"Job Queue"/]
+subgraph b_core_workers_processing["Processing"]
+subgraph b_core_workers_processing_executors["Executors"]
 worker[["Worker"]]
+end
+scheduler(("Scheduler"))
+end
+queue[/"Job Queue"/]
 end
 end
 subgraph b_edge["Edge / DMZ"]
@@ -35,7 +40,9 @@ gateway --> web
 idp --> auth
 orders -->|"SQL"| db
 queue --> gateway
-queue --> worker
+queue --> scheduler
+scheduler -->|"SQL"| db
+scheduler --> worker
 user --> web
 web -->|"HTTPS"| gateway
 web --> user
@@ -61,6 +68,7 @@ class auth participant
 class db database
 class idp entity
 class queue queue
+class scheduler control
 class worker collections
 class orders participant
 class fleet composite
@@ -69,6 +77,7 @@ style db fill:#805ad5,stroke:#4a5568,color:#f7fafc
 style gateway fill:#3182ce,stroke:#4a5568,color:#f7fafc
 style orders fill:#3182ce,stroke:#4a5568,color:#f7fafc
 style queue fill:#38a169,stroke:#4a5568,color:#f7fafc
+style scheduler fill:#3182ce,stroke:#4a5568,color:#f7fafc
 style worker fill:#38a169,stroke:#4a5568,color:#f7fafc
 style b_core fill:#2D3748,stroke:#4a5568,color:#f7fafc
 style b_edge fill:#2d333b,stroke:#4a5568,color:#f7fafc

@@ -35,6 +35,7 @@ let
       links = [ (link "Metrics" "https://grafana.example/db") ];
     };
     queue = component.of [ ty.queue-consumer ] "Job Queue";
+    scheduler = component.control [ ty.deployed-service ] "Scheduler";
     worker =
       component.collections
         [
@@ -83,7 +84,15 @@ in
             db
             fleet
             ;
-          workers = boundary "Worker Pool" { inherit (c) queue worker; };
+          # Four boundary levels (core > workers > processing > executors) so the
+          # nested sequence boxes are easy to see.
+          workers = boundary "Worker Pool" {
+            inherit (c) queue;
+            processing = boundary "Processing" {
+              inherit (c) scheduler;
+              executors = boundary "Executors" { inherit (c) worker; };
+            };
+          };
         };
 
     # A root-level leaf (not inside any boundary): rendered without a box and
@@ -204,8 +213,8 @@ in
       title = "Job Processing";
       steps = [
         (message.solidArrow c.gateway c.queue "enqueue(job)")
-        (create c.worker)
-        (message.solidPoint c.queue c.worker "deliver")
+        (message.dottedArrow c.queue c.scheduler "schedule")
+        (message.solidArrow c.scheduler c.worker "assign")
         (note.rightOf c.worker "spin up")
         (message.solidArrow c.worker c.db "write result")
         (message.solidArrow c.worker c.gateway {

@@ -9,12 +9,18 @@ db[("PostgreSQL")]
 gateway(("API Gateway"))
 orders["Orders API"]
 subgraph b_core_workers["Worker Pool"]
+subgraph b_core_workers_processing["Processing"]
+subgraph b_core_workers_processing_executors["Executors"]
 worker[["Worker"]]
+end
+scheduler(("Scheduler"))
+end
 end
 end
 auth -->|"SQL"| db
 gateway -->|"SQL"| db
 orders -->|"SQL"| db
+scheduler -->|"SQL"| db
 worker -->|"SQL"| db
 classDef actor fill:#eef0ff,stroke:#5a67d8,color:#1a202c
 classDef participant fill:#eaf5ff,stroke:#3182ce,color:#1a202c
@@ -30,11 +36,13 @@ class auth participant
 class gateway control
 class orders participant
 class worker collections
+class scheduler control
 class db database
 style auth fill:#3182ce,stroke:#4a5568,color:#f7fafc
 style db fill:#805ad5,stroke:#4a5568,color:#f7fafc
 style gateway fill:#3182ce,stroke:#4a5568,color:#f7fafc
 style orders fill:#3182ce,stroke:#4a5568,color:#f7fafc
+style scheduler fill:#3182ce,stroke:#4a5568,color:#f7fafc
 style worker fill:#38a169,stroke:#4a5568,color:#f7fafc
 style b_core fill:#2D3748,stroke:#4a5568,color:#f7fafc
 ```

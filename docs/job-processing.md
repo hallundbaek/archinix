@@ -7,14 +7,22 @@ box rgb(45,55,72) Core Services
 participant gateway@{ "type": "control" } as API Gateway
 participant db@{ "type": "database" } as PostgreSQL
 participant queue@{ "type": "queue" } as Job Queue
+participant scheduler@{ "type": "control" } as Scheduler
 participant worker@{ "type": "collections" } as Worker
 end
 rect rgba(0,0,0,0.08)
 Note over queue,worker: Worker Pool
+rect rgba(0,0,0,0.12)
+Note over scheduler,worker: Processing
+rect rgba(0,0,0,0.16)
+Note over worker: Executors
+end
+end
 end
 link db: Metrics @ https://grafana.example/db
 gateway ->> queue: enqueue(job)
-queue -) worker: deliver
+queue -->> scheduler: schedule
+scheduler ->> worker: assign
 Note right of worker: spin up
 worker ->> db: write result
 worker ->>() gateway: status

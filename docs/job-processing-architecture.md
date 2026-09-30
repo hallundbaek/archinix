@@ -7,8 +7,13 @@ subgraph b_core["Core Services"]
 db[("PostgreSQL")]
 gateway(("API Gateway"))
 subgraph b_core_workers["Worker Pool"]
-queue[/"Job Queue"/]
+subgraph b_core_workers_processing["Processing"]
+subgraph b_core_workers_processing_executors["Executors"]
 worker[["Worker"]]
+end
+scheduler(("Scheduler"))
+end
+queue[/"Job Queue"/]
 end
 end
 db --> queue
@@ -16,7 +21,8 @@ db --> worker
 gateway --> db
 gateway -->|"AMQP"| queue
 queue --> gateway
-queue --> worker
+queue --> scheduler
+scheduler --> worker
 worker -->|"SQL"| db
 worker --> gateway
 classDef actor fill:#eef0ff,stroke:#5a67d8,color:#1a202c
@@ -31,11 +37,13 @@ classDef composite fill:#edf2f7,stroke:#4a5568,stroke-width:3px,color:#1a202c
 classDef ancestor fill:#f7fafc,stroke:#718096,stroke-dasharray:5,5,color:#1a202c
 class gateway control
 class queue queue
-class db database
+class scheduler control
 class worker collections
+class db database
 style db fill:#805ad5,stroke:#4a5568,color:#f7fafc
 style gateway fill:#3182ce,stroke:#4a5568,color:#f7fafc
 style queue fill:#38a169,stroke:#4a5568,color:#f7fafc
+style scheduler fill:#3182ce,stroke:#4a5568,color:#f7fafc
 style worker fill:#38a169,stroke:#4a5568,color:#f7fafc
 style b_core fill:#2D3748,stroke:#4a5568,color:#f7fafc
 ```
