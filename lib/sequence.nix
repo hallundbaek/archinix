@@ -94,135 +94,130 @@ let
     comps: path:
     if path == [ ] then null else (boundaryByPath comps).${lib.concatStringsSep "/" path} or null;
 
-  # Trie of boundary paths -> direct members and ordered children. `order` lists
-  # "#self" and child names in first-appearance order, so unboxed participants
-  # keep their position relative to the boundary boxes.
-  buildBoundaryTree =
-    comps: participants:
+  participantBoundary =
+    comps: id:
     let
       flat = flatten comps;
-      bpathOf = id: if flat.leaves ? ${id} then flat.leaves.${id}.boundaryPath else [ ];
-      empty = {
-        members = [ ];
-        children = { };
-        order = [ ];
-      };
-      addOrder = order: tag: if lib.elem tag order then order else order ++ [ tag ];
-      insert =
-        node: path: id:
-        if path == [ ] then
-          node
-          // {
-            members = node.members ++ [ id ];
-            order = addOrder node.order "#self";
-          }
-        else
-          let
-            name = lib.head path;
-            rest = lib.tail path;
-          in
-          node
-          // {
-            children = node.children // {
-              ${name} = insert (node.children.${name} or empty) rest id;
-            };
-            order = addOrder node.order name;
-          };
     in
-    lib.foldl' (acc: id: insert acc (bpathOf id) id) empty participants;
+    if flat.leaves ? ${id} then flat.leaves.${id}.boundaryPath else [ ];
 
-  subtreeIds =
-    node:
-    node.members
-    ++ lib.concatMap (n: subtreeIds node.children.${n}) (lib.filter (t: t != "#self") node.order);
+  # All non-empty prefixes of a path, shortest first.
+  prefixes = path: map (n: lib.take n path) (lib.range 1 (lib.length path));
 
-  # Participant declarations, grouped by boundary. Mermaid `box` cannot nest, so
-  # ancestor boundaries are drawn as nested `rect` backgrounds with a spanning
-  # note naming each boundary; the innermost boundary is a labelled `box`.
-  renderParticipantGroups =
+  # Group participants by their outermost (top-level) boundary, in first
+  # appearance order; participants without a boundary are unboxed.
+  groupParticipants =
+    comps: participants:
+    let
+      annotated = map (id: {
+        inherit id;
+        top =
+          let
+            bp = participantBoundary comps id;
+          in
+          if bp == [ ] then null else lib.head bp;
+      }) participants;
+      keys = lib.unique (map (a: a.top) annotated);
+    in
+    map (k: {
+      top = k;
+      members = map (a: a.id) (lib.filter (a: a.top == k) annotated);
+    }) keys;
+
+  defaultRects = [
+    "rgba(0,0,0,0.04)"
+    "rgba(0,0,0,0.08)"
+    "rgba(0,0,0,0.12)"
+    "rgba(0,0,0,0.16)"
+  ];
+
+  # A low-opacity tint of a boundary colour (keeps text readable), or null for
+  # colours we cannot translate (named/hsl).
+  tintColor =
+    c:
+    let
+      sc = boxColor c;
+      m = builtins.match "rgb\\(([0-9]+,[0-9]+,[0-9]+)\\)" sc;
+    in
+    if m != null then
+      "rgba(${builtins.elemAt m 0},0.12)"
+    else if builtins.match "rgba\\([^)]*\\)" sc != null then
+      sc
+    else
+      null;
+
+  rectColor =
+    path: b:
+    let
+      tc = if b != null && b.color != null then tintColor b.color else null;
+    in
+    if tc != null then
+      tc
+    else
+      lib.elemAt defaultRects (lib.min (lib.length path - 1) (lib.length defaultRects - 1));
+
+  # A `box` around the participants of the outermost boundary (Mermaid boxes can
+  # only contain participant declarations, so nesting is expressed separately).
+  renderBoxGroup =
+    comps: types: resolveRef: group:
+    let
+      meta = if group.top == null then null else boundaryAt comps [ group.top ];
+      declOf =
+        id:
+        let
+          p = getParticipant comps types resolveRef id;
+        in
+        decl p.kind p.nodeId p.label;
+    in
+    if meta == null then
+      map declOf group.members
+    else
+      [
+        (
+          if meta.color != null then
+            "box ${boxColor meta.color} ${escape meta.label}"
+          else
+            "box ${escape meta.label}"
+        )
+      ]
+      ++ map declOf group.members
+      ++ [ "end" ];
+
+  # Rects + spanning notes for boundaries nested inside the outermost one,
+  # emitted after the participant declarations; rects nest to mirror the
+  # boundary hierarchy.
+  renderInnerRects =
     comps: types: resolveRef: participants:
     let
-      root = buildBoundaryTree comps participants;
-      participantOf = id: getParticipant comps types resolveRef id;
-      declOf = id: decl (participantOf id).kind (participantOf id).nodeId (participantOf id).label;
-      actorOf = id: (participantOf id).nodeId;
-      defaultRects = [
-        "rgba(0,0,0,0.04)"
-        "rgba(0,0,0,0.08)"
-        "rgba(0,0,0,0.12)"
-        "rgba(0,0,0,0.16)"
-      ];
-      # A low-opacity tint of a boundary colour (keeps text readable), or null
-      # for colours we cannot translate (named/hsl).
-      tintColor =
-        c:
-        let
-          sc = boxColor c;
-          m = builtins.match "rgb\\(([0-9]+,[0-9]+,[0-9]+)\\)" sc;
-        in
-        if m != null then
-          "rgba(${builtins.elemAt m 0},0.12)"
-        else if builtins.match "rgba\\([^)]*\\)" sc != null then
-          sc
-        else
-          null;
-      rectColor =
-        path: b:
-        let
-          tc = if b != null && b.color != null then tintColor b.color else null;
-        in
-        if tc != null then
-          tc
-        else
-          lib.elemAt defaultRects (lib.min (lib.length path - 1) (lib.length defaultRects - 1));
-      boxLine =
-        b: label:
-        if b != null && b.color != null then
-          "box ${boxColor b.color} ${escape label}"
-        else
-          "box ${escape label}";
+      annotated = map (id: {
+        inherit id;
+        bp = participantBoundary comps id;
+      }) participants;
+      innerPaths = lib.unique (
+        lib.concatMap (a: lib.filter (p: lib.length p >= 2) (prefixes a.bp)) annotated
+      );
+      membersOf = p: map (a: a.id) (lib.filter (a: lib.take (lib.length p) a.bp == p) annotated);
+      childrenOf = p: lib.filter (q: lib.lists.init q == p) innerPaths;
+      roots = lib.filter (p: lib.length p == 2) innerPaths;
+      actorOf = id: (getParticipant comps types resolveRef id).nodeId;
       emit =
-        path: node:
+        p:
         let
-          isRoot = path == [ ];
-          b = if isRoot then null else boundaryAt comps path;
-          label = if isRoot then "" else b.label;
-          childNames = lib.filter (t: t != "#self") node.order;
-          selfLines =
-            if node.members == [ ] then
-              [ ]
-            else if isRoot then
-              map declOf node.members
+          b = boundaryAt comps p;
+          members = membersOf p;
+          span =
+            if lib.length members == 1 then
+              [ (lib.head members) ]
             else
-              [ (boxLine b label) ] ++ map declOf node.members ++ [ "end" ];
-          content = lib.concatMap (
-            tag: if tag == "#self" then selfLines else emit (path ++ [ tag ]) node.children.${tag}
-          ) node.order;
-          noteLines =
-            if isRoot || childNames == [ ] then
-              [ ]
-            else
-              let
-                sub = subtreeIds node;
-                span =
-                  if lib.length sub == 1 then
-                    [ (lib.head sub) ]
-                  else
-                    [
-                      (lib.head sub)
-                      (lib.last sub)
-                    ];
-              in
-              [ "Note over ${lib.concatStringsSep "," (map actorOf span)}: ${escape label}" ];
+              [
+                (lib.head members)
+                (lib.last members)
+              ];
+          note = "Note over ${lib.concatStringsSep "," (map actorOf span)}: ${escape b.label}";
         in
-        if isRoot then
-          content
-        else if childNames == [ ] then
-          selfLines
-        else
-          [ "rect ${rectColor path b}" ] ++ content ++ noteLines ++ [ "end" ];
+        [ "rect ${rectColor p b}" ] ++ [ note ] ++ lib.concatMap emit (childrenOf p) ++ [ "end" ];
     in
-    emit [ ] root;
+    lib.concatMap emit roots;
 
   # Actors referenced by a step, in order of appearance (all step kinds).
   stepActors =
@@ -486,7 +481,8 @@ rec {
       ++ titleLines
       ++ accessLines
       ++ autonumberLines
-      ++ renderParticipantGroups comps types resolveRef participants
+      ++ lib.concatMap (renderBoxGroup comps types resolveRef) (groupParticipants comps participants)
+      ++ renderInnerRects comps types resolveRef participants
       ++ linkLines
       ++ renderSteps steps
     );

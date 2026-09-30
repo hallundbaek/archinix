@@ -162,11 +162,12 @@ node `{ label = "..."; kind = "..."; }` inside a
 
 Boundaries nest arbitrarily and render as nested `subgraph`s in architecture
 diagrams. In sequence diagrams, Mermaid `box` groups **cannot be nested**
-([mermaid#7664](https://github.com/mermaid-js/mermaid/issues/7664)), so each
-boundary is drawn as a nested coloured `rect` (ancestors) wrapping a labelled
-`box` for the innermost boundary, with a spanning `Note over …` naming each
-boundary (rects have no label of their own). Colour comes from the boundary, or
-a subtle default; participants without a boundary stay unboxed.
+([mermaid#7664](https://github.com/mermaid-js/mermaid/issues/7664)), so the
+**outermost** boundary is drawn as a `box` around its participants and every
+**inner** boundary as a nested tinted `rect` after the participant declarations,
+named by a spanning `Note over …` (rects have no label of their own). Colour
+comes from the boundary (tinted for rects) or a subtle default; participants
+without a boundary stay unboxed.
 
 ### Component kinds
 
