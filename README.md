@@ -147,7 +147,9 @@ in
   `details`, and an explicit `participants` list). A handle `id` that does not
   match its tree key is a validation error.
 - `boundary label children` — a boundary; `boundary { label; color; } children`
-  adds a colour. Boundaries may nest.
+  adds a colour (hex, `rgb`/`rgba`, `hsl`/`hsla`). Colour transparency is
+  preserved: sequence boxes/rects use the `rgba` value, and architecture styles
+  emit `fill-opacity`. Boundaries may nest.
 - `component.<kind> label` — a leaf. Add metadata with `//`, e.g.
   `component.database "PostgreSQL" // { links = [ ... ]; }`. `<kind>` is any name
   from the table below (`component.make` if you need full control).

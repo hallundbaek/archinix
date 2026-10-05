@@ -3,7 +3,7 @@
 ```mermaid
 sequenceDiagram
 accTitle: Job Processing
-box rgb(45,55,72) Core Services
+box rgba(45,55,72,0.6) Core Services
 participant gateway@{ "type": "control" } as API Gateway
 participant db@{ "type": "database" } as PostgreSQL
 participant queue@{ "type": "queue" } as Job Queue

@@ -263,6 +263,16 @@ let
     else
       null;
 
+  # Alpha of an rgba() colour (0-1), or null.
+  rgbaMatch = match "rgba\\([0-9]+[, ]+[0-9]+[, ]+[0-9]+[, ]+([0-9]*\\.?[0-9]+)\\)";
+
+  styleAlpha =
+    c:
+    let
+      m = rgbaMatch c;
+    in
+    if m == null then null else elemAt m 0;
+
   # Relative luminance of a #rrggbb color (0-255 scale), for text contrast.
   hexLuminance =
     c:
@@ -283,6 +293,19 @@ let
       if hexLuminance sc > 150 then "#1a202c" else "#f7fafc"
     else
       "#1a202c";
+
+  # Flowchart `style` `fill:` fragment, preserving rgba transparency via
+  # `fill-opacity` (Mermaid `style` rejects `rgba()`). Null when unsupported.
+  styleFill =
+    c:
+    let
+      sc = styleColor c;
+      alpha = styleAlpha c;
+    in
+    if sc == null then
+      null
+    else
+      "fill:${sc}" + (if alpha == null then "" else ",fill-opacity:${alpha}");
 
   # ---------------------------------------------------------------------------
   # Small helpers.
@@ -311,6 +334,7 @@ in
     boxColor
     styleColor
     styleText
+    styleFill
     ;
   inherit lines quote;
 }

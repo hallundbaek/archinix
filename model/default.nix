@@ -74,7 +74,7 @@ in
       boundary
         {
           label = "Core Services";
-          color = "rgb(45, 55, 72)";
+          color = "rgba(45, 55, 72, 0.6)";
         }
         {
           inherit (c)

@@ -11,7 +11,7 @@ let
     quote
     shape
     classDefs
-    styleColor
+    styleFill
     styleText
     ;
   inherit (components) flatten isRef;
@@ -293,9 +293,9 @@ rec {
             ""
           else
             let
-              sc = styleColor b.color;
+              f = styleFill b.color;
             in
-            if sc == null then "" else "style ${b.id} fill:${sc},stroke:#4a5568,color:${styleText b.color}"
+            if f == null then "" else "style ${b.id} ${f},stroke:#4a5568,color:${styleText b.color}"
         ) usedBoundaries
       );
 
@@ -303,14 +303,16 @@ rec {
         n: lib.elem n nodeSet && (typeUtils.resolveColor types (leafById n)) != null
       ) (builtins.attrNames flat.leaves);
 
-      leafStyleLines = map (
-        n:
-        let
-          c = typeUtils.resolveColor types (leafById n);
-          sc = styleColor c;
-        in
-        "style ${n} fill:${sc},stroke:#4a5568,color:${styleText c}"
-      ) coloredLeaves;
+      leafStyleLines = builtins.filter (x: x != null) (
+        map (
+          n:
+          let
+            c = typeUtils.resolveColor types (leafById n);
+            f = styleFill c;
+          in
+          if f == null then null else "style ${n} ${f},stroke:#4a5568,color:${styleText c}"
+        ) coloredLeaves
+      );
 
       localNodeSet = lib.filter (n: flat.leaves ? ${n}) nodeSet;
       classLines =

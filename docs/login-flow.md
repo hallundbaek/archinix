@@ -23,7 +23,7 @@ end
 box rgb(45,51,59) Edge / DMZ
 participant web@{ "type": "boundary" } as Web App
 end
-box rgb(45,55,72) Core Services
+box rgba(45,55,72,0.6) Core Services
 participant gateway@{ "type": "control" } as API Gateway
 participant auth as Auth Service
 participant db@{ "type": "database" } as PostgreSQL
