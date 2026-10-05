@@ -78,7 +78,10 @@ Add Archinix as an input and keep only `flake.nix` + `model/` in your project:
 
 `mkOutputs` provides `packages.docs`, `apps.render`/`watch`/`check-mermaid`,
 `checks.docs-up-to-date` (when `docsPath` is given), `devShells` and `formatter`.
-`nix flake init -t github:hallundbaek/archinix` scaffolds exactly this.
+`docsPath` also sets the directory `render` writes to and `watch` serves
+(derived from its name, e.g. `./generated` → `generated`) and the path the check
+compares against; `docsDir` overrides just the output directory. `nix flake init
+-t github:hallundbaek/archinix` scaffolds a minimal input-based project.
 
 ## Commands
 

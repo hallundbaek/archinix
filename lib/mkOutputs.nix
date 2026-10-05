@@ -9,7 +9,7 @@ let
   ];
 
   renderApp =
-    pkgs: docsDir:
+    pkgs: src: dest:
     pkgs.writeShellApplication {
       name = "render-architecture-docs";
       runtimeInputs = [
@@ -18,9 +18,9 @@ let
       ];
       text = ''
         set -euo pipefail
-        dest="''${1:-docs}"
+        dest="''${1:-${dest}}"
         mode="''${2:-}"
-        src="${docsDir}"
+        src="${src}"
 
         if [ "$mode" = "--check" ]; then
           if ! diff -ru "$src" "$dest"; then
@@ -83,7 +83,7 @@ let
       { };
 
   watchApp =
-    pkgs:
+    pkgs: dest:
     let
       mermaidJs =
         if pkgs ? "mermaid-cli" then
@@ -132,7 +132,7 @@ let
           exit 1
         fi
 
-        docs="$root/docs"
+        docs="$root/${dest}"
         nix_args=(--extra-experimental-features nix-command --extra-experimental-features flakes)
 
         echo "[archinix] initial render"
@@ -170,12 +170,24 @@ let
       nixpkgs,
       model,
       docsPath ? null,
+      docsDir ? null,
       name ? "architecture-docs",
       systems ? defaultSystems,
       extraChecks ? (_: { }),
       devShellPackages ? (_: [ ]),
     }:
     let
+      # Where `render` writes and `watch` serves. Defaults to `docsPath`'s
+      # directory name, so setting `docsPath = ./generated;` also redirects
+      # generation there; `docsDir` overrides explicitly.
+      outDir =
+        if docsDir != null then
+          docsDir
+        else if docsPath != null then
+          baseNameOf (toString docsPath)
+        else
+          "docs";
+
       docs = pkgs: lib.renderDerivation { inherit pkgs model name; };
       forAll = f: nixpkgs.lib.genAttrs systems (system: f (import nixpkgs { inherit system; }));
 
@@ -210,8 +222,8 @@ let
       apps = forAll (
         pkgs:
         let
-          render = "${renderApp pkgs (docs pkgs)}/bin/render-architecture-docs";
-          watch = "${watchApp pkgs}/bin/archinix-watch";
+          render = "${renderApp pkgs (docs pkgs) outDir}/bin/render-architecture-docs";
+          watch = "${watchApp pkgs outDir}/bin/archinix-watch";
         in
         mermaidCliApp pkgs (docs pkgs)
         // {
