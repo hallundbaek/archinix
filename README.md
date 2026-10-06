@@ -83,6 +83,19 @@ Add Archinix as an input and keep only `flake.nix` + `model/` in your project:
 compares against; `docsDir` overrides just the output directory. `nix flake init
 -t github:hallundbaek/archinix` scaffolds a minimal input-based project.
 
+Set `markdownFormatter = { pkgs, src }: <derivation>;` to run a markdown
+formatter over the rendered docs before they are written (the returned
+derivation is the final docs tree):
+
+```nix
+markdownFormatter = { pkgs, src }:
+  pkgs.runCommand "docs-formatted" { nativeBuildInputs = [ pkgs.mdformat ]; } ''
+    cp -r ${src} $out
+    chmod -R u+w $out
+    find $out -name '*.md' -exec mdformat {} +
+  '';
+```
+
 ## Commands
 
 | Command | Description |

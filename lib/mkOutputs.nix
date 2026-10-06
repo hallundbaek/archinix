@@ -77,6 +77,7 @@ let
               '';
             }
           }/bin/check-mermaid";
+          meta.description = "Render every diagram with mermaid-cli to validate it";
         };
       }
     else
@@ -171,6 +172,7 @@ let
       model,
       docsPath ? null,
       docsDir ? null,
+      markdownFormatter ? null,
       name ? "architecture-docs",
       systems ? defaultSystems,
       extraChecks ? (_: { }),
@@ -188,7 +190,20 @@ let
         else
           "docs";
 
-      docs = pkgs: lib.renderDerivation { inherit pkgs model name; };
+      # `markdownFormatter`, when set, is `{ pkgs, src } -> derivation` and runs
+      # over the rendered docs (e.g. mdformat/prettier) to produce the final set.
+      docs =
+        pkgs:
+        let
+          raw = lib.renderDerivation { inherit pkgs model name; };
+        in
+        if markdownFormatter == null then
+          raw
+        else
+          markdownFormatter {
+            inherit pkgs;
+            src = raw;
+          };
       forAll = f: nixpkgs.lib.genAttrs systems (system: f (import nixpkgs { inherit system; }));
 
       docsUpToDate =
@@ -230,18 +245,22 @@ let
           render = {
             type = "app";
             program = render;
+            meta.description = "Regenerate the Markdown docs from the model";
           };
           watch = {
             type = "app";
             program = watch;
+            meta.description = "Watch the model and serve a live HTML preview";
           };
           preview = {
             type = "app";
             program = watch;
+            meta.description = "Watch the model and serve a live HTML preview";
           };
           default = {
             type = "app";
             program = render;
+            meta.description = "Regenerate the Markdown docs from the model";
           };
         }
       );
