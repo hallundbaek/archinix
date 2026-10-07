@@ -192,7 +192,10 @@ let
         let
           flat = components.flatten lv.comps;
           crossLocal = lib.filter (n: flat.leaves ? ${n}) (
-            lib.concatMap (e: [ e.from e.to ]) (crossOf cross lv).edges
+            lib.concatMap (e: [
+              e.from
+              e.to
+            ]) (crossOf cross lv).edges
           );
           nodes = lib.unique (
             architecture.globalNodes {
@@ -397,7 +400,7 @@ let
       dsl
       ;
     inherit validateModel render renderDerivation;
-    mkOutputs = (import ./mkOutputs.nix { lib = self; }).mkOutputs;
-  };
+  }
+  // (import ./mkOutputs.nix { lib = self; });
 in
 self

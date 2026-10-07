@@ -119,6 +119,45 @@ pre-commit.settings.hooks = {
 (`entry = "nix run .#render -- docs --check"`, `files = "^(model|docs)/"`,
 `pass_filenames = false`).
 
+### flake-parts
+
+Archinix ships flake-parts modules: `flakeModules.default` (packages, apps,
+checks) and `flakeModules.gitHooks` (adds the docs hook to your existing
+`perSystem.pre-commit` set, for use with
+[git-hooks.nix](https://github.com/cachix/git-hooks.nix)).
+
+```nix
+outputs = inputs@{ flake-parts, ... }:
+  flake-parts.lib.mkFlake { inherit inputs; } {
+    systems = [ "x86_64-linux" "aarch64-linux" "aarch64-darwin" ];
+    imports = [
+      inputs.git-hooks-nix.flakeModule
+      inputs.archinix.flakeModules.default
+      inputs.archinix.flakeModules.gitHooks   # only if you use git-hooks.nix
+    ];
+
+    perSystem = { ... }: {
+      archinix = {
+        model = import ./model { archinix = inputs.archinix.lib.dsl; };
+        docsPath = ./docs;
+        markdownFormatter = { pkgs, src }: …;   # optional
+        gitHooks.enable = true;                  # add docs-up-to-date to pre-commit
+      };
+
+      # your hooks; docs-up-to-date is added alongside them
+      pre-commit.settings.hooks.nixfmt-rfc-style.enable = true;
+    };
+  };
+```
+
+Configure it in `perSystem` (not at the top level) so it composes with
+flake-parts. Without the `gitHooks` module, merge manually:
+`pre-commit.settings.hooks = { … } // config.archinix.gitHooks.hooks;`.
+
+> The hook runs `nix run`, so it works as a git hook on your machine, but the
+> git-hooks.nix sandbox check (`nix flake check`) has no `nix`; set
+> `pre-commit.check.enable = false;` if you don't want that check.
+
 ## Commands
 
 | Command | Description |

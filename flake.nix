@@ -16,6 +16,15 @@
     // {
       inherit lib;
 
+      # For flake-parts users:
+      #   imports = [ inputs.archinix.flakeModules.default ];
+      #   # plus, when using git-hooks.nix:
+      #   imports = [ inputs.archinix.flakeModules.gitHooks ];
+      flakeModules = {
+        default = import ./flake-module.nix lib;
+        gitHooks = import ./flake-module-git-hooks.nix;
+      };
+
       templates = {
         # Minimal project: only `flake.nix` + `model/`; Archinix is a flake input.
         minimal = {

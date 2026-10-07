@@ -8,6 +8,35 @@ let
     "aarch64-darwin"
   ];
 
+  # Where `render` writes and `watch` serves. Defaults to `docsPath`'s directory
+  # name, so `docsPath = ./generated;` also redirects generation there.
+  outDirOf =
+    {
+      docsDir ? null,
+      docsPath ? null,
+    }:
+    if docsDir != null then
+      docsDir
+    else if docsPath != null then
+      baseNameOf (toString docsPath)
+    else
+      "docs";
+
+  # git-hooks.nix-compatible hook running the docs check when model/ or the docs
+  # dir change.
+  mkDocsHook =
+    { docsDir }:
+    {
+      docs-up-to-date = {
+        enable = true;
+        name = "docs-up-to-date";
+        entry = "nix run .#render -- ${docsDir} --check";
+        files = "^(model|${docsDir})/";
+        pass_filenames = false;
+        language = "system";
+      };
+    };
+
   renderApp =
     pkgs: src: dest:
     pkgs.writeShellApplication {
@@ -166,6 +195,79 @@ let
       '';
     };
 
+  # Per-system outputs, shared by `mkOutputs` and the flake-parts module.
+  mkSystemOutputs =
+    {
+      pkgs,
+      model,
+      docsPath ? null,
+      docsDir ? null,
+      markdownFormatter ? null,
+      name ? "architecture-docs",
+    }:
+    let
+      outDir = outDirOf { inherit docsDir docsPath; };
+      rawDocs = lib.renderDerivation { inherit pkgs model name; };
+      docs =
+        if markdownFormatter == null then
+          rawDocs
+        else
+          markdownFormatter {
+            inherit pkgs;
+            src = rawDocs;
+          };
+      checks =
+        if docsPath == null then
+          { }
+        else
+          {
+            docs-up-to-date =
+              pkgs.runCommand "docs-up-to-date"
+                {
+                  nativeBuildInputs = [ pkgs.diffutils ];
+                  generated = docs;
+                  committed = docsPath;
+                }
+                ''
+                  if ! diff -ru "$generated" "$committed"; then
+                    echo "error: committed docs/ differ from generated output" >&2
+                    exit 1
+                  fi
+                  touch $out
+                '';
+          };
+      apps = mermaidCliApp pkgs docs // {
+        render = {
+          type = "app";
+          program = "${renderApp pkgs docs outDir}/bin/render-architecture-docs";
+          meta.description = "Regenerate the Markdown docs from the model";
+        };
+        watch = {
+          type = "app";
+          program = "${watchApp pkgs outDir}/bin/archinix-watch";
+          meta.description = "Watch the model and serve a live HTML preview";
+        };
+        preview = {
+          type = "app";
+          program = "${watchApp pkgs outDir}/bin/archinix-watch";
+          meta.description = "Watch the model and serve a live HTML preview";
+        };
+        default = {
+          type = "app";
+          program = "${renderApp pkgs docs outDir}/bin/render-architecture-docs";
+          meta.description = "Regenerate the Markdown docs from the model";
+        };
+      };
+    in
+    {
+      inherit outDir;
+      packages = {
+        docs = docs;
+        default = docs;
+      };
+      inherit apps checks;
+    };
+
   mkOutputs =
     {
       nixpkgs,
@@ -180,50 +282,23 @@ let
       gitHooks ? { },
     }:
     let
-      # Where `render` writes and `watch` serves. Defaults to `docsPath`'s
-      # directory name, so setting `docsPath = ./generated;` also redirects
-      # generation there; `docsDir` overrides explicitly.
-      outDir =
-        if docsDir != null then
-          docsDir
-        else if docsPath != null then
-          baseNameOf (toString docsPath)
-        else
-          "docs";
-
-      # `markdownFormatter`, when set, is `{ pkgs, src } -> derivation` and runs
-      # over the rendered docs (e.g. mdformat/prettier) to produce the final set.
-      docs =
-        pkgs:
-        let
-          raw = lib.renderDerivation { inherit pkgs model name; };
-        in
-        if markdownFormatter == null then
-          raw
-        else
-          markdownFormatter {
-            inherit pkgs;
-            src = raw;
-          };
+      outDir = outDirOf { inherit docsDir docsPath; };
       forAll = f: nixpkgs.lib.genAttrs systems (system: f (import nixpkgs { inherit system; }));
+      sysOf =
+        pkgs:
+        mkSystemOutputs {
+          inherit
+            pkgs
+            model
+            docsPath
+            docsDir
+            markdownFormatter
+            name
+            ;
+        };
 
-      # Optional git hook running the docs check when model/ or the docs dir change.
       gitHooksEnable = gitHooks.enable or false;
-
-      gitHooksHooks =
-        if gitHooksEnable then
-          {
-            docs-up-to-date = {
-              enable = true;
-              name = "docs-up-to-date";
-              entry = "nix run .#render -- ${outDir} --check";
-              files = "^(model|${outDir})/";
-              pass_filenames = false;
-              language = "system";
-            };
-          }
-        else
-          { };
+      gitHooksHooks = if gitHooksEnable then mkDocsHook { docsDir = outDir; } else { };
 
       # Standalone hook content used by gitHooks.enable (for projects that do not
       # already manage hooks, e.g. via git-hooks.nix).
@@ -252,67 +327,11 @@ let
           fi
         fi
       '';
-
-      docsUpToDate =
-        pkgs:
-        if docsPath == null then
-          { }
-        else
-          {
-            docs-up-to-date =
-              pkgs.runCommand "docs-up-to-date"
-                {
-                  nativeBuildInputs = [ pkgs.diffutils ];
-                  generated = docs pkgs;
-                  committed = docsPath;
-                }
-                ''
-                  if ! diff -ru "$generated" "$committed"; then
-                    echo "error: committed docs/ differ from generated output" >&2
-                    exit 1
-                  fi
-                  touch $out
-                '';
-          };
     in
     {
-      packages = forAll (pkgs: {
-        docs = docs pkgs;
-        default = docs pkgs;
-      });
-
-      apps = forAll (
-        pkgs:
-        let
-          render = "${renderApp pkgs (docs pkgs) outDir}/bin/render-architecture-docs";
-          watch = "${watchApp pkgs outDir}/bin/archinix-watch";
-        in
-        mermaidCliApp pkgs (docs pkgs)
-        // {
-          render = {
-            type = "app";
-            program = render;
-            meta.description = "Regenerate the Markdown docs from the model";
-          };
-          watch = {
-            type = "app";
-            program = watch;
-            meta.description = "Watch the model and serve a live HTML preview";
-          };
-          preview = {
-            type = "app";
-            program = watch;
-            meta.description = "Watch the model and serve a live HTML preview";
-          };
-          default = {
-            type = "app";
-            program = render;
-            meta.description = "Regenerate the Markdown docs from the model";
-          };
-        }
-      );
-
-      checks = forAll (pkgs: docsUpToDate pkgs // extraChecks pkgs);
+      packages = forAll (pkgs: (sysOf pkgs).packages);
+      apps = forAll (pkgs: (sysOf pkgs).apps);
+      checks = forAll (pkgs: (sysOf pkgs).checks // extraChecks pkgs);
 
       devShells = forAll (
         pkgs:
@@ -342,5 +361,10 @@ let
     };
 in
 {
-  inherit mkOutputs;
+  inherit
+    mkOutputs
+    mkSystemOutputs
+    mkDocsHook
+    outDirOf
+    ;
 }
