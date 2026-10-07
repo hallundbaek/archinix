@@ -177,6 +177,7 @@ let
       systems ? defaultSystems,
       extraChecks ? (_: { }),
       devShellPackages ? (_: [ ]),
+      gitHooks ? { },
     }:
     let
       # Where `render` writes and `watch` serves. Defaults to `docsPath`'s
@@ -205,6 +206,52 @@ let
             src = raw;
           };
       forAll = f: nixpkgs.lib.genAttrs systems (system: f (import nixpkgs { inherit system; }));
+
+      # Optional git hook running the docs check when model/ or the docs dir change.
+      gitHooksEnable = gitHooks.enable or false;
+
+      gitHooksHooks =
+        if gitHooksEnable then
+          {
+            docs-up-to-date = {
+              enable = true;
+              name = "docs-up-to-date";
+              entry = "nix run .#render -- ${outDir} --check";
+              files = "^(model|${outDir})/";
+              pass_filenames = false;
+              language = "system";
+            };
+          }
+        else
+          { };
+
+      # Standalone hook content used by gitHooks.enable (for projects that do not
+      # already manage hooks, e.g. via git-hooks.nix).
+      gitHookScript = ''
+        #!/usr/bin/env bash
+        # Managed by Archinix (gitHooks.enable); regenerate with `nix develop`.
+        set -euo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        if git diff --cached --name-only | grep -qE '^(model|${outDir})(/|$)'; then
+          nix run .#render -- ${outDir} --check
+        fi
+      '';
+
+      gitHooksShellHook = nixpkgs.lib.optionalString gitHooksEnable ''
+        _archinix_hookdir="$(git rev-parse --git-path hooks 2>/dev/null || true)"
+        if [ -n "$_archinix_hookdir" ] && [ "$(git config --get core.hooksPath 2>/dev/null || true)" = "" ]; then
+          if [ ! -e "$_archinix_hookdir/pre-commit" ] || grep -q archinix "$_archinix_hookdir/pre-commit" 2>/dev/null; then
+            cat > "$_archinix_hookdir/pre-commit" <<'ARCHINIX_HOOK_EOF'
+        ${gitHookScript}
+        ARCHINIX_HOOK_EOF
+            chmod +x "$_archinix_hookdir/pre-commit"
+          else
+            echo "[archinix] an existing pre-commit hook was found; not overwriting it." >&2
+            echo "[archinix] merge \`gitHooks.hooks\` into your hook config instead." >&2
+          fi
+        fi
+      '';
 
       docsUpToDate =
         pkgs:
@@ -274,6 +321,7 @@ let
         in
         {
           default = pkgs.mkShell {
+            shellHook = gitHooksShellHook;
             packages = [
               pkgs.nixfmt
               pkgs.nixd
@@ -287,6 +335,10 @@ let
       );
 
       formatter = forAll (pkgs: pkgs.nixfmt);
+
+      gitHooks = {
+        hooks = gitHooksHooks;
+      };
     };
 in
 {

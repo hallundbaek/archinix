@@ -96,6 +96,29 @@ markdownFormatter = { pkgs, src }:
   '';
 ```
 
+### Git hook
+
+Set `gitHooks.enable = true;` alongside `model`/`docsPath` to install a
+`pre-commit` hook (via `devShells.default.shellHook`) that runs
+`nix run .#render -- <docsDir> --check` **only when `model/` or the docs
+directory changed**, and fails the commit if the docs are stale. It will not
+overwrite an existing `pre-commit` hook and is skipped when `core.hooksPath` is
+set.
+
+If you already manage hooks (e.g. with
+[git-hooks.nix](https://github.com/cachix/git-hooks.nix) /
+`pre-commit.settings.hooks`), merge Archinix's hook definition instead:
+
+```nix
+pre-commit.settings.hooks = {
+  # …your existing hooks…
+} // archinix.gitHooks.hooks;
+```
+
+`gitHooks.hooks.docs-up-to-date` is a ready git-hooks.nix hook
+(`entry = "nix run .#render -- docs --check"`, `files = "^(model|docs)/"`,
+`pass_filenames = false`).
+
 ## Commands
 
 | Command | Description |
