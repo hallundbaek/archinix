@@ -65,7 +65,6 @@ in
     }:
     let
       cfg = config.archinix;
-      outDir = archinix.outDirOf { inherit (cfg) docsDir docsPath; };
       sys = archinix.mkSystemOutputs {
         inherit pkgs;
         model = cfg.model;
@@ -81,6 +80,6 @@ in
         apps
         checks
         ;
-      archinix.gitHooks.hooks = archinix.mkDocsHook { docsDir = outDir; };
+      archinix.gitHooks.hooks = sys.gitHooks.hooks;
     };
 }

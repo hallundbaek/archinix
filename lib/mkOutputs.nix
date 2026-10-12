@@ -23,14 +23,33 @@ let
       "docs";
 
   # git-hooks.nix-compatible hook running the docs check when model/ or the docs
-  # dir change.
+  # dir change. The entry re-renders via `nix run` when `nix` is on PATH (a real
+  # commit hook), and otherwise (e.g. the git-hooks.nix sandbox check, which has
+  # no nix) diffs the committed docs against the docs built at evaluation time.
   mkDocsHook =
-    { docsDir }:
+    {
+      pkgs,
+      docsDir,
+      generated,
+    }:
+    let
+      checker = pkgs.writeShellApplication {
+        name = "archinix-docs-check";
+        runtimeInputs = [ pkgs.diffutils ];
+        text = ''
+          if command -v nix >/dev/null 2>&1; then
+            exec nix --extra-experimental-features 'nix-command flakes' run .#render -- ${docsDir} --check
+          else
+            exec diff -ru ${generated} ./${docsDir}
+          fi
+        '';
+      };
+    in
     {
       docs-up-to-date = {
         enable = true;
         name = "docs-up-to-date";
-        entry = "nix run .#render -- ${docsDir} --check";
+        entry = "${checker}/bin/archinix-docs-check";
         files = "^(model|${docsDir})/";
         pass_filenames = false;
         language = "system";
@@ -266,6 +285,13 @@ let
         default = docs;
       };
       inherit apps checks;
+      gitHooks = {
+        hooks = mkDocsHook {
+          inherit pkgs;
+          docsDir = outDir;
+          generated = docs;
+        };
+      };
     };
 
   mkOutputs =
@@ -298,7 +324,6 @@ let
         };
 
       gitHooksEnable = gitHooks.enable or false;
-      gitHooksHooks = if gitHooksEnable then mkDocsHook { docsDir = outDir; } else { };
 
       # Standalone hook content used by gitHooks.enable (for projects that do not
       # already manage hooks, e.g. via git-hooks.nix).
@@ -355,9 +380,7 @@ let
 
       formatter = forAll (pkgs: pkgs.nixfmt);
 
-      gitHooks = {
-        hooks = gitHooksHooks;
-      };
+      gitHooks = forAll (pkgs: (sysOf pkgs).gitHooks);
     };
 in
 {

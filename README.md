@@ -110,14 +110,16 @@ If you already manage hooks (e.g. with
 `pre-commit.settings.hooks`), merge Archinix's hook definition instead:
 
 ```nix
+# with mkOutputs (per system)
 pre-commit.settings.hooks = {
   # …your existing hooks…
-} // archinix.gitHooks.hooks;
+} // out.gitHooks.${system}.hooks;
 ```
 
-`gitHooks.hooks.docs-up-to-date` is a ready git-hooks.nix hook
-(`entry = "nix run .#render -- docs --check"`, `files = "^(model|docs)/"`,
-`pass_filenames = false`).
+`gitHooks.<system>.hooks.docs-up-to-date` is a ready git-hooks.nix hook. Its
+entry re-renders via `nix run` when `nix` is on `PATH` (a real commit hook) and
+otherwise diffs against the docs built at evaluation time — so it also runs in
+git-hooks.nix's sandbox check, which has no `nix`.
 
 ### flake-parts
 
@@ -154,9 +156,10 @@ Configure it in `perSystem` (not at the top level) so it composes with
 flake-parts. Without the `gitHooks` module, merge manually:
 `pre-commit.settings.hooks = { … } // config.archinix.gitHooks.hooks;`.
 
-> The hook runs `nix run`, so it works as a git hook on your machine, but the
-> git-hooks.nix sandbox check (`nix flake check`) has no `nix`; set
-> `pre-commit.check.enable = false;` if you don't want that check.
+> The hook's entry re-renders via `nix run` when `nix` is available (a real git
+> commit hook) and otherwise diffs the committed docs against the docs built at
+> evaluation time — so the git-hooks.nix sandbox check (`nix flake check`) works
+> too, even though it has no `nix`.
 
 ## Commands
 
